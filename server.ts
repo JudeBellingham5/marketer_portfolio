@@ -16,7 +16,7 @@ const upload = multer({ storage: multer.memoryStorage() });
 async function startServer() {
   // Middleware to log requests for debugging
   app.use((req, res, next) => {
-    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+    console.log(`[SERVER] ${new Date().toISOString()} ${req.method} ${req.url}`);
     next();
   });
 
@@ -24,58 +24,56 @@ async function startServer() {
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
-  // API Routes - Explicitly handle them before any static serving
-  const apiRouter = express.Router();
-
-  apiRouter.get("/health", (req, res) => {
+  // API Routes
+  app.get("/api/health", (req, res) => {
+    console.log("[SERVER] Health check");
     res.json({ status: "ok", time: new Date().toISOString() });
   });
 
-  apiRouter.post("/admin/login", (req, res) => {
+  app.post("/api/admin/login", (req, res) => {
     const { password } = req.body;
+    console.log(`[SERVER] Auth attempt with password: ${password}`);
     if (password === ADMIN_PASSWORD) {
       return res.json({ success: true, token: AUTH_TOKEN });
     }
     return res.status(401).json({ success: false, message: "Invalid password" });
   });
 
-  apiRouter.get("/portfolio", (req, res) => {
+  app.get("/api/portfolio", (req, res) => {
+    console.log("[SERVER] GET /api/portfolio");
     try {
       if (fs.existsSync(DATA_FILE)) {
-        const data = JSON.parse(fs.readFileSync(DATA_FILE, "utf-8"));
-        return res.json(data);
+        const data = fs.readFileSync(DATA_FILE, "utf-8");
+        return res.json(JSON.parse(data));
       }
+      console.warn("[SERVER] portfolio.json not found");
       return res.status(404).json({ error: "Data file not found" });
     } catch (error) {
-      console.error("Read error:", error);
+      console.error("[SERVER] Read error:", error);
       res.status(500).json({ error: "Failed to read data" });
     }
   });
 
-  apiRouter.post("/portfolio", (req, res) => {
+  app.post("/api/save-portfolio", (req, res) => {
     const authToken = req.headers.authorization;
-    const contentType = req.headers["content-type"];
-    console.log(`Save request received. Content-Type: ${contentType}`);
-    console.log(`Received token: "${authToken}"`);
-    console.log(`Expected token: "${AUTH_TOKEN}"`);
-    console.log(`Token matches: ${authToken === AUTH_TOKEN}`);
+    console.log(`[SERVER] POST /api/save-portfolio - Token: ${authToken}`);
     
     if (authToken !== AUTH_TOKEN) {
-      console.warn("Unauthorized save attempt detected.");
+      console.warn("[SERVER] Unauthorized save attempt");
       return res.status(403).json({ error: "Unauthorized" });
     }
 
     try {
       fs.writeFileSync(DATA_FILE, JSON.stringify(req.body, null, 2));
-      console.log("Successfully saved portfolio.json");
+      console.log("[SERVER] Successfully updated portfolio.json");
       res.json({ success: true });
     } catch (error) {
-      console.error("Save error:", error);
+      console.error("[SERVER] Save error:", error);
       res.status(500).json({ error: "Failed to save data" });
     }
   });
 
-  apiRouter.post("/upload", upload.single("file"), (req, res) => {
+  app.post("/api/upload", upload.single("file"), (req, res) => {
     const authToken = req.headers.authorization;
     if (authToken !== AUTH_TOKEN) {
       return res.status(403).json({ error: "Unauthorized" });
@@ -98,12 +96,16 @@ async function startServer() {
       fs.writeFileSync(filePath, req.file.buffer);
       res.json({ success: true, url: `/uploads/${filename}` });
     } catch (error) {
-      console.error("Upload error:", error);
+      console.error("[API] Upload error:", error);
       res.status(500).json({ error: "Upload failed" });
     }
   });
 
-  app.use("/api", apiRouter);
+  // Catch-all for API to debug 404s (must be AFTER all other API routes)
+  app.all("/api/*", (req, res) => {
+    console.warn(`[SERVER] Unhandled API request: ${req.method} ${req.url}`);
+    res.status(404).json({ error: "API route not found", path: req.url });
+  });
 
   // Expose local uploads directory
   const publicUploadDir = path.join(process.cwd(), "public", "uploads");

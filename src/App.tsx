@@ -48,7 +48,7 @@ export default function App() {
 
     try {
       // 1. Try server API
-      const res = await fetch("/api/portfolio", {
+      const res = await fetch("/api/save-portfolio", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
