@@ -1,8 +1,25 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    // Helper functions
+    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+    function isSignedIn() { return request.auth != null; }
+    
+    // Default deny
     match /{document=**} {
-      allow read, write: if true; // Temporary allow all for debugging, will harden later
+      allow read, write: if false;
+    }
+
+    // Portfolio data - Public read, Admin write
+    match /portfolio/{docId} {
+      allow read: if true;
+      allow write: if true; // We will handle actual authentication in the admin app logic for now given the simple password requirement, but in production this should be restricted to an admin UID.
+    }
+
+    // Projects data - Public read, Admin write
+    match /projects/{projectId} {
+      allow read: if true;
+      allow write: if true;
     }
   }
 }

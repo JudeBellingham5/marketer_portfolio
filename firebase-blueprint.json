@@ -1,20 +1,45 @@
 {
   "entities": {
-    "Portfolio": {
-      "title": "Portfolio Data",
-      "description": "Entire portfolio data structure",
+    "profile": {
+      "title": "Profile",
+      "description": "Main portfolio information",
       "type": "object",
       "properties": {
-        "hero": { "type": "object" },
-        "profile": { "type": "object" },
-        "projects": { "type": "array" }
-      }
+        "personalInfo": { "type": "object" },
+        "about": { "type": "object" },
+        "skills": { "type": "array" },
+        "education": { "type": "array" },
+        "certifications": { "type": "array" },
+        "profileImage": { "type": "string" },
+        "languages": { "type": "array" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["personalInfo", "profileImage"]
+    },
+    "project": {
+      "title": "Project",
+      "description": "Portfolio project item",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "tags": { "type": "array" },
+        "links": { "type": "object" },
+        "order": { "type": "number" }
+      },
+      "required": ["id", "title", "imageUrl"]
     }
   },
   "firestore": {
-    "configs/portfolio": {
-      "schema": "Portfolio",
-      "description": "The current portfolio configuration"
+    "/portfolio/main": {
+      "schema": "profile",
+      "description": "The main profile document"
+    },
+    "/projects/{projectId}": {
+      "schema": "project",
+      "description": "Individual project items"
     }
   }
 }

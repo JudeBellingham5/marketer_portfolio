@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import { PortfolioData } from "./types";
 import Navbar from "./components/Navbar";
 import Hero from "./components/Hero";
@@ -7,10 +8,52 @@ import Competencies from "./components/Competencies";
 import Projects from "./components/Projects";
 import Trust from "./components/Trust";
 import Contact from "./components/Contact";
+import Admin from "./pages/Admin";
+import { getPortfolio, getProjects, savePortfolio, saveProject } from "./lib/firebase";
 import initialData from "../portfolio.json";
 
-export default function App() {
-  const [data] = useState<PortfolioData>(initialData as PortfolioData);
+function Home() {
+  const [data, setData] = useState<PortfolioData | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        let portfolioDoc = await getPortfolio();
+        let projectsList = await getProjects();
+
+        if (!portfolioDoc || projectsList.length === 0) {
+          console.log("Initializing Firebase with local data...");
+          const { projects, ...rest } = initialData;
+          await savePortfolio(rest);
+          for (const project of (projects as any[])) {
+            await saveProject(project.id, project);
+          }
+          portfolioDoc = rest;
+          projectsList = projects;
+        }
+
+        setData({
+          ...portfolioDoc,
+          projects: projectsList
+        } as PortfolioData);
+      } catch (error) {
+        console.error("Error fetching data:", error);
+        setData(initialData as PortfolioData);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchData();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-white">
+        <div className="animate-pulse text-xl font-bold text-navy-900">로딩 중...</div>
+      </div>
+    );
+  }
 
   if (!data) return null;
 
@@ -37,10 +80,21 @@ export default function App() {
       <footer className="py-12 border-t border-gray-100 bg-gray-50/50">
         <div className="container mx-auto px-6 text-center">
           <p className="text-sm font-medium text-gray-400">
-            © 2024 Min Chae Yun. All rights reserved.
+            © {new Date().getFullYear()} Min Chae Yun. All rights reserved.
           </p>
         </div>
       </footer>
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <Router>
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/admin" element={<Admin />} />
+      </Routes>
+    </Router>
   );
 }
