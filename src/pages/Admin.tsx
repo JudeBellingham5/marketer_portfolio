@@ -1,9 +1,7 @@
 import { useState, useEffect, FormEvent, ChangeEvent } from "react";
 import { PortfolioData, Project } from "../types";
 import { X, Save, Lock, LayoutDashboard, FileText, Briefcase, Settings, Upload, Image as ImageIcon, Plus, Trash2, Loader2, AlertCircle, CheckCircle2 } from "lucide-react";
-import { db, storage, auth } from "../lib/firebase";
-import { ref, uploadBytes, getDownloadURL, uploadBytesResumable } from "firebase/storage";
-import { doc, getDoc } from "firebase/firestore";
+import { auth } from "../lib/firebase";
 import { signInAnonymously } from "firebase/auth";
 
 interface AdminProps {
@@ -158,24 +156,20 @@ export default function Admin({ data, onClose, onSave }: AdminProps) {
       return;
     }
 
-    setUploadStatus({ isUploading: true, stage: "초기화 중...", progress: 10 });
+    setUploadStatus({ isUploading: true, stage: "업로드 준비 중...", progress: 20 });
     console.log("Starting upload for:", file.name);
     
-    // Environment detection
-    const isNetlify = window.location.hostname.includes("netlify") || 
-                     window.location.hostname.includes("github.io");
-
-    // Safety timeout to ensure UI doesn't hang forever
+    // Safety timeout
     const uploadTimeout = setTimeout(() => {
       setUploadStatus(prev => ({ ...prev, isUploading: false }));
-      alert("업로드 시간이 초과되었습니다. 네트워크 상태를 확인하시거나 다시 시도해주세요.");
-    }, 90000); // 90 seconds for large files
+      alert("업로드 시간이 초과되었습니다.");
+    }, 60000);
 
     try {
       let uploadTarget: Blob | File = file;
       if (file.type.startsWith("image/")) {
         try {
-          setUploadStatus({ isUploading: true, stage: "이미지 압축 중...", progress: 20 });
+          setUploadStatus({ isUploading: true, stage: "이미지 최적화 중...", progress: 40 });
           uploadTarget = await compressImage(file);
         } catch (compressError) {
           console.warn("Compression failed, using original:", compressError);
@@ -183,95 +177,38 @@ export default function Admin({ data, onClose, onSave }: AdminProps) {
         }
       }
 
-      // 1. Try Server-side upload first (Only if NOT on Netlify)
-      if (!isNetlify) {
-        setUploadStatus({ isUploading: true, stage: "로컬 서버로 전송 중...", progress: 40 });
-        try {
-          const formData = new FormData();
-          formData.append("file", uploadTarget, file.name);
-          const token = localStorage.getItem("admin_token");
-          
-          const serverRes = await fetch("/api/upload", {
-            method: "POST",
-            headers: { "Authorization": token || "" },
-            body: formData,
-          }).catch(() => null);
+      setUploadStatus({ isUploading: true, stage: "서버로 전송 중...", progress: 70 });
+      
+      const formData = new FormData();
+      formData.append("file", uploadTarget, file.name);
+      
+      const token = localStorage.getItem("admin_token");
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        headers: { 
+          "Authorization": token || "" 
+        },
+        body: formData,
+      });
 
-          if (serverRes && serverRes.ok) {
-            const result = await serverRes.json();
-            if (result.success) {
-              clearTimeout(uploadTimeout);
-              callback(result.url);
-              setUploadStatus({ isUploading: false, stage: "", progress: 100 });
-              alert("업로드가 완료되었습니다 (로컬 서버). 반드시 좌측 'Save Changes'도 눌러주세요!");
-              return;
-            }
-          }
-        } catch (serverError) {
-          console.warn("Server upload failed, trying Firebase Storage:", serverError);
-        }
+      if (!res.ok) {
+        throw new Error(`Server returned ${res.status}`);
       }
 
-      // 2. Fallback to Firebase Storage (Production / Netlify)
-      setUploadStatus({ isUploading: true, stage: "Firebase Storage 준비 중...", progress: 60 });
-      
-      const sanitizedName = file.name.replace(/[^a-zA-Z0-9.]/g, '_');
-      const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-      const filename = `uploads/${uniqueSuffix}_${sanitizedName}`;
-      const storageRef = ref(storage, filename);
-      
-      console.log("Starting Firebase Upload:", filename);
-      
-      // Use simpler uploadBytes for better CORS compatibility first
-      try {
-        setUploadStatus({ isUploading: true, stage: "Firebase로 직접 전송...", progress: 80 });
-        await uploadBytes(storageRef, uploadTarget);
-        const url = await getDownloadURL(storageRef);
-        
-        clearTimeout(uploadTimeout);
-        callback(url);
+      const result = await res.json();
+      if (result.success) {
+        callback(result.url);
         setUploadStatus({ isUploading: false, stage: "", progress: 100 });
-        alert("업로드가 완료되었습니다 (Firebase). 반드시 좌측 'Save Changes'도 눌러주세요!");
-        return;
-      } catch (bytesError: any) {
-        console.warn("uploadBytes failed, trying Resumable:", bytesError);
-        // If it's a CORS error, resumable might not help but let's try one last thing
-        
-        const uploadTask = uploadBytesResumable(storageRef, uploadTarget);
-        
-        return new Promise((resolve, reject) => {
-          uploadTask.on('state_changed', 
-            (snapshot) => {
-              const progressOfTask = (snapshot.bytesTransferred / snapshot.totalBytes) * 15 + 80; // 80% to 95%
-              setUploadStatus(prev => ({ ...prev, stage: "Firebase 재시도 중...", progress: progressOfTask }));
-            }, 
-            (error) => {
-              clearTimeout(uploadTimeout);
-              reject(error);
-            }, 
-            async () => {
-              const url = await getDownloadURL(storageRef);
-              clearTimeout(uploadTimeout);
-              callback(url);
-              setUploadStatus({ isUploading: false, stage: "", progress: 100 });
-              alert("업로드가 완료되었습니다 (Firebase). 반드시 좌측 'Save Changes'도 눌러주세요!");
-              resolve(url);
-            }
-          );
-        });
+        alert("업로드가 완료되었습니다. 반드시 사이드바의 'Save Changes' 버튼을 눌러야 최종 반영됩니다.");
+      } else {
+        throw new Error(result.error || "Upload failed");
       }
     } catch (error: any) {
-      console.error("Upload process error:", error);
-      let errorMsg = error.message;
-      if (error.code === 'storage/unauthorized') {
-        errorMsg = "Firebase Storage 권한이 없습니다. 인증 설정을 확인하세요.";
-      } else if (error.message === 'Failed to fetch' || error.name === 'TypeError') {
-        errorMsg = "네트워크 오류 또는 CORS 차단이 발생했습니다. 브라우저에서 '광고 차단기'를 끄거나 Firebase Storage CORS 설정을 확인하세요.";
-      }
-      alert(`업로드 중 오류가 발생했습니다: ${errorMsg}`);
+      console.error("Upload error:", error);
+      alert(`업로드 중 오류가 발생했습니다: ${error.message}`);
+      setUploadStatus({ isUploading: false, stage: "", progress: 0 });
     } finally {
       clearTimeout(uploadTimeout);
-      setUploadStatus({ isUploading: false, stage: "", progress: 100 });
       e.target.value = "";
     }
   };
