@@ -32,7 +32,7 @@ export default function Profile({ introduction, details, education, certificatio
                 <div className="aspect-square w-48 bg-gray-100 rounded-2xl overflow-hidden shrink-0 flex items-center justify-center border border-gray-200">
                   {profileImage ? (
                     <img 
-                      src={profileImage} 
+                      src={profileImage.startsWith('http') ? profileImage : `${import.meta.env.BASE_URL}${profileImage.startsWith('/') ? profileImage.slice(1) : profileImage}`} 
                       alt="민채윤" 
                       className="max-w-full max-h-full object-contain" 
                       referrerPolicy="no-referrer"

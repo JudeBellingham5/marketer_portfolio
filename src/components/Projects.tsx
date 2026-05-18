@@ -35,7 +35,11 @@ export default function Projects({ projects }: ProjectsProps) {
                 <div className="bg-navy-900 rounded-2xl overflow-hidden lg:sticky lg:top-24 text-white shadow-xl">
                   {project.imageUrl && (
                     <div className="aspect-video w-full overflow-hidden bg-white/5 border-b border-white/10 flex items-center justify-center">
-                      <img src={project.imageUrl} alt={project.title} className="max-w-full max-h-full object-contain" />
+                      <img 
+                        src={project.imageUrl.startsWith('http') ? project.imageUrl : `${import.meta.env.BASE_URL}${project.imageUrl.startsWith('/') ? project.imageUrl.slice(1) : project.imageUrl}`} 
+                        alt={project.title} 
+                        className="max-w-full max-h-full object-contain" 
+                      />
                     </div>
                   )}
                   <div className="p-8">
