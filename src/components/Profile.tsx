@@ -12,14 +12,6 @@ interface ProfileProps {
 }
 
 export default function Profile({ introduction, details, education, certifications, languages, profileImage }: ProfileProps) {
-  const getFullUrl = (path?: string) => {
-    if (!path) return "";
-    if (path.startsWith("http") || path.startsWith("data:")) return path;
-    const base = import.meta.env.BASE_URL.replace(/\/$/, "");
-    const cleanPath = path.startsWith("/") ? path : `/${path}`;
-    return `${base}${cleanPath}`;
-  };
-
   return (
     <section id="profile" className="py-20 bg-navy-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -40,7 +32,7 @@ export default function Profile({ introduction, details, education, certificatio
                 <div className="aspect-square w-48 bg-gray-100 rounded-2xl overflow-hidden shrink-0 flex items-center justify-center border border-gray-200">
                   {profileImage ? (
                     <img 
-                      src={getFullUrl(profileImage)} 
+                      src={profileImage.startsWith('http') ? profileImage : profileImage} 
                       alt="민채윤" 
                       className="max-w-full max-h-full object-contain" 
                       referrerPolicy="no-referrer"
