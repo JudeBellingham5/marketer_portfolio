@@ -80,11 +80,20 @@ export default function Admin({ data, onClose, onSave }: AdminProps) {
 
   const compressImage = (file: File): Promise<Blob> => {
     return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error("Compression timeout")), 10000);
       const reader = new FileReader();
-      reader.readAsDataURL(file);
+      
+      reader.onerror = (err) => {
+        clearTimeout(timeout);
+        reject(err);
+      };
+
       reader.onload = (event) => {
         const img = new Image();
-        img.src = event.target?.result as string;
+        img.onerror = (err) => {
+          clearTimeout(timeout);
+          reject(err);
+        };
         img.onload = () => {
           const canvas = document.createElement("canvas");
           const MAX_WIDTH = 1200;
@@ -111,6 +120,7 @@ export default function Admin({ data, onClose, onSave }: AdminProps) {
           
           canvas.toBlob(
             (blob) => {
+              clearTimeout(timeout);
               if (blob) resolve(blob);
               else reject(new Error("Canvas compression failed"));
             },
@@ -118,9 +128,9 @@ export default function Admin({ data, onClose, onSave }: AdminProps) {
             0.8
           );
         };
-        img.onerror = (err) => reject(err);
+        img.src = event.target?.result as string;
       };
-      reader.onerror = (err) => reject(err);
+      reader.readAsDataURL(file);
     });
   };
 
@@ -128,36 +138,42 @@ export default function Admin({ data, onClose, onSave }: AdminProps) {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 2 * 1024 * 1024) {
-      alert("파일 용량이 너무 큽니다. 2MB 이하의 이미지만 업로드 가능합니다.");
+    if (file.size > 5 * 1024 * 1024) {
+      alert("파일 용량이 너무 큽니다. 5MB 이하의 이미지만 업로드 가능합니다.");
       e.target.value = "";
       return;
     }
 
     setIsUploading(true);
+    console.log("Starting upload for:", file.name);
     try {
       let uploadTarget: Blob | File = file;
       if (file.type.startsWith("image/")) {
         try {
+          console.log("Compressing...");
           uploadTarget = await compressImage(file);
         } catch (compressError) {
+          console.warn("Compression failed, using original:", compressError);
           uploadTarget = file;
         }
       }
 
-      // Use Firebase Storage directly (Works on Netlify)
       const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
       const filename = `uploads/${uniqueSuffix}_${file.name}`;
       const storageRef = ref(storage, filename);
       
+      console.log("Uploading to Firebase Storage:", filename);
       await uploadBytes(storageRef, uploadTarget);
+      
+      console.log("Fetching download URL...");
       const url = await getDownloadURL(storageRef);
+      console.log("URL received:", url);
       
       callback(url);
-      alert("이미지 업로드에 성공했습니다.");
+      alert("이미지 업로드가 완료되었습니다. 반드시 사이드바의 'Save Changes' 버튼을 눌러 저장해주세요.");
     } catch (error: any) {
-      console.error("Upload error:", error);
-      alert("업로드 중 오류가 발생했습니다. (Firebase Storage 권한을 확인하세요)");
+      console.error("Upload process error:", error);
+      alert(`업로드 중 오류가 발생했습니다: ${error.message}\n\nFirebase Storage의 '인증된 사용자' 쓰기 권한이 필요합니다.`);
     } finally {
       setIsUploading(false);
       e.target.value = "";
@@ -323,9 +339,11 @@ export default function Admin({ data, onClose, onSave }: AdminProps) {
                         className="hidden"
                         accept="image/*"
                         disabled={isUploading}
-                        onChange={(e) => handleFileUpload(e, (url) => 
-                          setEditableData({ ...editableData, profile: { ...editableData.profile, profileImage: url } })
-                        )}
+                        onChange={(e) => handleFileUpload(e, (url) => {
+                          if (editableData) {
+                            setEditableData({ ...editableData, profile: { ...editableData.profile, profileImage: url } });
+                          }
+                        })}
                       />
                     </label>
                   </div>
@@ -527,9 +545,11 @@ export default function Admin({ data, onClose, onSave }: AdminProps) {
                           accept="image/*"
                           disabled={isUploading}
                           onChange={(e) => handleFileUpload(e, (url) => {
-                            const newProjects = [...editableData.projects];
-                            newProjects[idx].imageUrl = url;
-                            setEditableData({ ...editableData, projects: newProjects });
+                            if (editableData) {
+                              const newProjects = [...editableData.projects];
+                              newProjects[idx].imageUrl = url;
+                              setEditableData({ ...editableData, projects: newProjects });
+                            }
                           })}
                         />
                       </label>
