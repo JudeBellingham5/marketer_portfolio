@@ -3,22 +3,15 @@ import path from "path";
 import fs from "fs";
 import multer from "multer";
 import { createServer as createViteServer } from "vite";
-import { initializeApp, getApps, cert } from "firebase-admin/app";
-import { getFirestore } from "firebase-admin/firestore";
-import { getStorage } from "firebase-admin/storage";
+import { initializeApp } from "firebase/app";
+import { getFirestore, doc, getDoc, setDoc, collection } from "firebase/firestore";
+import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import firebaseConfig from "./firebase-applet-config.json" assert { type: "json" };
 
-// Initialize Firebase Admin (Server-side)
-// Admin SDK bypasses Security Rules, so it's safer for the node backend.
-if (getApps().length === 0) {
-  initializeApp({
-    projectId: firebaseConfig.projectId,
-    storageBucket: firebaseConfig.storageBucket,
-  });
-}
-
-const db = getFirestore(firebaseConfig.firestoreDatabaseId);
-const bucket = getStorage().bucket();
+// Initialize Firebase Client SDK (preferred for robustness in AI Studio environment)
+const firebaseApp = initializeApp(firebaseConfig);
+const db = getFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId);
+const storage = getStorage(firebaseApp);
 
 const PORT = 3000;
 const DATA_FILE = path.join(process.cwd(), "portfolio.json");
@@ -35,9 +28,11 @@ async function startServer() {
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
 
-  // Debug middleware (useful for catching 404s)
+  // Debug middleware
   app.use((req, res, next) => {
-    console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
+    if (req.url.startsWith("/api")) {
+      console.log(`[API REQUEST] ${new Date().toISOString()} - ${req.method} ${req.url}`);
+    }
     next();
   });
 
@@ -48,10 +43,10 @@ async function startServer() {
 
   app.get("/api/portfolio", async (req, res) => {
     try {
-      const docRef = db.collection("configs").doc("portfolio");
-      const docSnap = await docRef.get();
+      const docRef = doc(db, "configs", "portfolio");
+      const docSnap = await getDoc(docRef);
       
-      if (docSnap.exists) {
+      if (docSnap.exists()) {
         return res.json(docSnap.data());
       }
       
@@ -59,7 +54,7 @@ async function startServer() {
       if (fs.existsSync(DATA_FILE)) {
         const localData = JSON.parse(fs.readFileSync(DATA_FILE, "utf-8"));
         try {
-          await docRef.set(localData);
+          await setDoc(docRef, localData);
         } catch (writeError) {
           console.error("Failed to seed firestore:", writeError);
         }
@@ -78,17 +73,19 @@ async function startServer() {
           console.error("Local file read error:", fileError);
         }
       }
-      return res.status(500).json({ error: "Failed to read data from any source" });
+      return res.status(500).json({ error: "Failed to read data from any source. Check Firestore permissions." });
     }
   });
 
   app.post("/api/admin/login", (req, res) => {
     const { password } = req.body;
-    console.log("Login request received");
+    console.log("Login attempt...");
     
     if (password === ADMIN_PASSWORD) {
+      console.log("Login success");
       return res.json({ success: true, token: AUTH_TOKEN });
     } else {
+      console.log("Login failed");
       return res.status(401).json({ success: false, message: "Invalid password" });
     }
   });
@@ -101,7 +98,8 @@ async function startServer() {
 
     try {
       // Primary: Firestore
-      await db.collection("configs").doc("portfolio").set(req.body);
+      const docRef = doc(db, "configs", "portfolio");
+      await setDoc(docRef, req.body);
       
       // Secondary: Local file backup
       try {
@@ -118,7 +116,7 @@ async function startServer() {
         fs.writeFileSync(DATA_FILE, JSON.stringify(req.body, null, 2));
         return res.json({ success: true, message: "Saved to local backup only" });
       } catch (fileError) {
-        res.status(500).json({ error: "Failed to save data to any source" });
+        res.status(500).json({ error: "Failed to save data. Check Firestore permissions." });
       }
     }
   });
@@ -136,28 +134,18 @@ async function startServer() {
     try {
       const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
       const filename = `uploads/${uniqueSuffix}${path.extname(req.file.originalname)}`;
-      const file = bucket.file(filename);
+      const storageRef = ref(storage, filename);
 
-      await file.save(req.file.buffer, {
-        metadata: {
-          contentType: req.file.mimetype,
-        },
+      await uploadBytes(storageRef, req.file.buffer, {
+        contentType: req.file.mimetype,
       });
 
-      // Make the file public for portfolio access
-      await file.makePublic();
-
-      const publicUrl = `https://storage.googleapis.com/${bucket.name}/${filename}`;
+      const publicUrl = await getDownloadURL(storageRef);
       res.json({ success: true, url: publicUrl });
     } catch (error) {
       console.error("Upload error:", error);
-      res.status(500).json({ error: "Failed to upload file to storage" });
+      res.status(500).json({ error: "Failed to upload file. Check Storage permissions." });
     }
-  });
-
-  // Explicitly handle 404 for API routes
-  app.all("/api/*", (req, res) => {
-    res.status(404).json({ error: `API route not found: ${req.method} ${req.url}` });
   });
 
   // Vite / Static files
@@ -172,6 +160,10 @@ async function startServer() {
     if (fs.existsSync(distPath)) {
       app.use(express.static(distPath));
       app.get("*", (req, res) => {
+        // If it's an API route that wasn't caught, return 404 JSON
+        if (req.url.startsWith("/api/")) {
+          return res.status(404).json({ error: "API route not found" });
+        }
         res.sendFile(path.join(distPath, "index.html"));
       });
     } else {
