@@ -34,6 +34,13 @@ async function startServer() {
     next();
   });
 
+  // Expose local uploads directory
+  const uploadDir = path.join(process.cwd(), "public", "uploads");
+  if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir, { recursive: true });
+  }
+  app.use("/uploads", express.static(uploadDir));
+
   // Health check
   app.get("/api/health", (req, res) => {
     res.json({ 
@@ -135,18 +142,22 @@ async function startServer() {
 
     try {
       const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-      const filename = `uploads/${uniqueSuffix}${path.extname(req.file.originalname)}`;
-      const storageRef = ref(storage, filename);
+      const ext = path.extname(req.file.originalname);
+      const filename = `${uniqueSuffix}${ext}`;
+      const uploadDir = path.join(process.cwd(), "public", "uploads");
+      
+      if (!fs.existsSync(uploadDir)) {
+        fs.mkdirSync(uploadDir, { recursive: true });
+      }
 
-      await uploadBytes(storageRef, req.file.buffer, {
-        contentType: req.file.mimetype,
-      });
+      const filePath = path.join(uploadDir, filename);
+      fs.writeFileSync(filePath, req.file.buffer);
 
-      const publicUrl = await getDownloadURL(storageRef);
+      const publicUrl = `/uploads/${filename}`;
       res.json({ success: true, url: publicUrl });
     } catch (error) {
       console.error("Upload error:", error);
-      res.status(500).json({ error: "Failed to upload file. Check Storage permissions." });
+      res.status(500).json({ error: "Failed to upload file locally." });
     }
   });
 
