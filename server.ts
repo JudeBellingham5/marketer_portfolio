@@ -14,23 +14,24 @@ const AUTH_TOKEN = "token-admin-authorized-0925";
 const upload = multer({ storage: multer.memoryStorage() });
 
 async function startServer() {
-  app.use(express.json({ limit: "50mb" })); // Increase limit for Base64 images
+  // Middleware to log requests for debugging
+  app.use((req, res, next) => {
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+    next();
+  });
+
+  // Body parsers
+  app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
-  // Expose local uploads directory (for legacy support if needed)
-  const uploadDir = path.join(process.cwd(), "public", "uploads");
-  if (!fs.existsSync(uploadDir)) {
-    fs.mkdirSync(uploadDir, { recursive: true });
-  }
-  app.use("/uploads", express.static(uploadDir));
+  // API Routes - Explicitly handle them before any static serving
+  const apiRouter = express.Router();
 
-  // Health check
-  app.get("/api/health", (req, res) => {
+  apiRouter.get("/health", (req, res) => {
     res.json({ status: "ok", time: new Date().toISOString() });
   });
 
-  // Login route
-  app.post("/api/admin/login", (req, res) => {
+  apiRouter.post("/admin/login", (req, res) => {
     const { password } = req.body;
     if (password === ADMIN_PASSWORD) {
       return res.json({ success: true, token: AUTH_TOKEN });
@@ -38,8 +39,7 @@ async function startServer() {
     return res.status(401).json({ success: false, message: "Invalid password" });
   });
 
-  // Get portfolio data
-  app.get("/api/portfolio", (req, res) => {
+  apiRouter.get("/portfolio", (req, res) => {
     try {
       if (fs.existsSync(DATA_FILE)) {
         const data = JSON.parse(fs.readFileSync(DATA_FILE, "utf-8"));
@@ -52,15 +52,22 @@ async function startServer() {
     }
   });
 
-  // Update portfolio data
-  app.post("/api/portfolio", (req, res) => {
+  apiRouter.post("/portfolio", (req, res) => {
     const authToken = req.headers.authorization;
+    const contentType = req.headers["content-type"];
+    console.log(`Save request received. Content-Type: ${contentType}`);
+    console.log(`Received token: "${authToken}"`);
+    console.log(`Expected token: "${AUTH_TOKEN}"`);
+    console.log(`Token matches: ${authToken === AUTH_TOKEN}`);
+    
     if (authToken !== AUTH_TOKEN) {
+      console.warn("Unauthorized save attempt detected.");
       return res.status(403).json({ error: "Unauthorized" });
     }
 
     try {
       fs.writeFileSync(DATA_FILE, JSON.stringify(req.body, null, 2));
+      console.log("Successfully saved portfolio.json");
       res.json({ success: true });
     } catch (error) {
       console.error("Save error:", error);
@@ -68,8 +75,7 @@ async function startServer() {
     }
   });
 
-  // Legacy upload route (optional now since we use Base64)
-  app.post("/api/upload", upload.single("file"), (req, res) => {
+  apiRouter.post("/upload", upload.single("file"), (req, res) => {
     const authToken = req.headers.authorization;
     if (authToken !== AUTH_TOKEN) {
       return res.status(403).json({ error: "Unauthorized" });
@@ -80,6 +86,10 @@ async function startServer() {
     }
 
     try {
+      const uploadDir = path.join(process.cwd(), "public", "uploads");
+      if (!fs.existsSync(uploadDir)) {
+        fs.mkdirSync(uploadDir, { recursive: true });
+      }
       const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
       const ext = path.extname(req.file.originalname);
       const filename = `${uniqueSuffix}${ext}`;
@@ -88,9 +98,18 @@ async function startServer() {
       fs.writeFileSync(filePath, req.file.buffer);
       res.json({ success: true, url: `/uploads/${filename}` });
     } catch (error) {
+      console.error("Upload error:", error);
       res.status(500).json({ error: "Upload failed" });
     }
   });
+
+  app.use("/api", apiRouter);
+
+  // Expose local uploads directory
+  const publicUploadDir = path.join(process.cwd(), "public", "uploads");
+  if (fs.existsSync(publicUploadDir)) {
+    app.use("/uploads", express.static(publicUploadDir));
+  }
 
   // Vite / Static files
   if (process.env.NODE_ENV !== "production") {
@@ -108,6 +127,12 @@ async function startServer() {
       });
     }
   }
+
+  // Catch-all 404 for debugging
+  app.use((req, res) => {
+    console.warn(`404 - Not Found: ${req.method} ${req.url}`);
+    res.status(404).json({ error: "Route not found", method: req.method, url: req.url });
+  });
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on port ${PORT}`);
