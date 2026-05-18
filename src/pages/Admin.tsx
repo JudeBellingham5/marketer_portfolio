@@ -1,8 +1,6 @@
 import { useState, useEffect, FormEvent, ChangeEvent } from "react";
 import { PortfolioData, Project } from "../types";
 import { X, Save, Lock, LayoutDashboard, FileText, Briefcase, Settings, Upload, Image as ImageIcon, Plus, Trash2, Loader2, AlertCircle, CheckCircle2 } from "lucide-react";
-import { auth } from "../lib/firebase";
-import { signInAnonymously } from "firebase/auth";
 
 interface AdminProps {
   data: PortfolioData | null;
@@ -64,15 +62,6 @@ export default function Admin({ data, onClose, onSave }: AdminProps) {
       // 2. Fallback to client-side check if 404 or backend unavailable (Netlify environment)
       console.log("Falling back to client-side auth check");
       if (password === ADMIN_PASSWORD) {
-        // Sign in to Firebase Auth to allow Storage writes
-        try {
-          await signInAnonymously(auth);
-          console.log("Firebase Anonymous Auth successful");
-        } catch (authError) {
-          console.error("Firebase Auth failed:", authError);
-          // Still proceed, maybe rules allow public write (though unlikely)
-        }
-        
         setIsAuthorized(true);
         localStorage.setItem("admin_token", AUTH_TOKEN);
       } else {
@@ -108,8 +97,8 @@ export default function Admin({ data, onClose, onSave }: AdminProps) {
         };
         img.onload = () => {
           const canvas = document.createElement("canvas");
-          const MAX_WIDTH = 1200;
-          const MAX_HEIGHT = 1200;
+          const MAX_WIDTH = 1000;
+          const MAX_HEIGHT = 1000;
           let width = img.width;
           let height = img.height;
 
@@ -156,59 +145,50 @@ export default function Admin({ data, onClose, onSave }: AdminProps) {
       return;
     }
 
-    setUploadStatus({ isUploading: true, stage: "업로드 준비 중...", progress: 20 });
-    console.log("Starting upload for:", file.name);
+    setUploadStatus({ isUploading: true, stage: "이미지 처리 중...", progress: 30 });
+    console.log("Starting local processing for:", file.name);
     
-    // Safety timeout
-    const uploadTimeout = setTimeout(() => {
-      setUploadStatus(prev => ({ ...prev, isUploading: false }));
-      alert("업로드 시간이 초과되었습니다.");
-    }, 60000);
-
     try {
-      let uploadTarget: Blob | File = file;
-      if (file.type.startsWith("image/")) {
+      // For persistent static sites, we'll use Base64 strings.
+      // This way, when the user saves the portfolio, the image data is embedded in the JSON.
+      // We'll compress it heavily to keep it efficient.
+      const reader = new FileReader();
+      
+      reader.onload = async (event) => {
         try {
-          setUploadStatus({ isUploading: true, stage: "이미지 최적화 중...", progress: 40 });
-          uploadTarget = await compressImage(file);
-        } catch (compressError) {
-          console.warn("Compression failed, using original:", compressError);
-          uploadTarget = file;
+          const base64 = event.target?.result as string;
+          setUploadStatus({ isUploading: true, stage: "이미지 최적화 중...", progress: 60 });
+          
+          // Use the existing compressImage logic to get a small Blob
+          const compressedBlob = await compressImage(file);
+          
+          // Convert the compressed Blob back to Base64 for the URL
+          const compressedReader = new FileReader();
+          compressedReader.onloadend = () => {
+            const finalBase64 = compressedReader.result as string;
+            callback(finalBase64);
+            setUploadStatus({ isUploading: false, stage: "", progress: 100 });
+            alert("이미지가 임시로 불러와졌습니다. 왼쪽의 'Save Changes' 버튼을 눌러야 영구 저장됩니다.");
+          };
+          compressedReader.readAsDataURL(compressedBlob);
+        } catch (error: any) {
+          console.error("Processing error:", error);
+          alert("이미지 처리 중 오류가 발생했습니다.");
+          setUploadStatus({ isUploading: false, stage: "", progress: 0 });
         }
-      }
-
-      setUploadStatus({ isUploading: true, stage: "서버로 전송 중...", progress: 70 });
+      };
       
-      const formData = new FormData();
-      formData.append("file", uploadTarget, file.name);
+      reader.onerror = () => {
+        alert("파일을 읽는 도중 오류가 발생했습니다.");
+        setUploadStatus({ isUploading: false, stage: "", progress: 0 });
+      };
       
-      const token = localStorage.getItem("admin_token");
-      const res = await fetch("/api/upload", {
-        method: "POST",
-        headers: { 
-          "Authorization": token || "" 
-        },
-        body: formData,
-      });
-
-      if (!res.ok) {
-        throw new Error(`Server returned ${res.status}`);
-      }
-
-      const result = await res.json();
-      if (result.success) {
-        callback(result.url);
-        setUploadStatus({ isUploading: false, stage: "", progress: 100 });
-        alert("업로드가 완료되었습니다. 반드시 사이드바의 'Save Changes' 버튼을 눌러야 최종 반영됩니다.");
-      } else {
-        throw new Error(result.error || "Upload failed");
-      }
+      reader.readAsDataURL(file);
     } catch (error: any) {
-      console.error("Upload error:", error);
-      alert(`업로드 중 오류가 발생했습니다: ${error.message}`);
+      console.error("Upload process error:", error);
+      alert(`오류가 발생했습니다: ${error.message}`);
       setUploadStatus({ isUploading: false, stage: "", progress: 0 });
     } finally {
-      clearTimeout(uploadTimeout);
       e.target.value = "";
     }
   };

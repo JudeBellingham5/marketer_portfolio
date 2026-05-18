@@ -10,8 +10,6 @@ import Contact from "./components/Contact";
 import Admin from "./pages/Admin";
 import { motion, AnimatePresence } from "motion/react";
 import initialData from "../portfolio.json";
-import { db } from "./lib/firebase";
-import { doc, getDoc, setDoc } from "firebase/firestore";
 
 export default function App() {
   const [data, setData] = useState<PortfolioData | null>(null);
@@ -24,22 +22,14 @@ export default function App() {
 
   const fetchData = async () => {
     try {
-      // Primary: Try Firestore directly (works on Netlify)
-      const docRef = doc(db, "configs", "portfolio");
-      const docSnap = await getDoc(docRef);
-      
-      if (docSnap.exists()) {
-        setData(docSnap.data() as PortfolioData);
+      // Primary: Try server API (Cloud Run environment)
+      const res = await fetch("/api/portfolio").catch(() => null);
+      if (res && res.ok) {
+        const json = await res.json();
+        setData(json);
       } else {
-        // Secondary: Fallback to server API (if it exists)
-        const res = await fetch("/api/portfolio").catch(() => null);
-        if (res && res.ok) {
-          const json = await res.json();
-          setData(json);
-        } else {
-          // Tertiary: Fallback to local file
-          setData(initialData as PortfolioData);
-        }
+        // Secondary: Fallback to local file (Static / Netlify initial state)
+        setData(initialData as PortfolioData);
       }
     } catch (error) {
       console.error("Failed to fetch data:", error);
@@ -57,19 +47,19 @@ export default function App() {
     }
 
     try {
-      // 1. Try Firestore directly
-      const docRef = doc(db, "configs", "portfolio");
-      await setDoc(docRef, newData);
-
-      // 2. Try server backup (silent fail if server doesn't exist)
-      fetch("/api/portfolio", {
+      // 1. Try server API
+      const res = await fetch("/api/portfolio", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "Authorization": token,
         },
         body: JSON.stringify(newData),
-      }).catch(() => null);
+      });
+
+      if (!res.ok) {
+        throw new Error(`Server returned ${res.status}`);
+      }
 
       setData(newData);
       setIsAdminOpen(false);
