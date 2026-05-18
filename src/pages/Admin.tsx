@@ -158,64 +158,98 @@ export default function Admin() {
         {/* Profile Section */}
         <div className="bg-white rounded-2xl p-8 shadow-sm border border-gray-100">
           <div className="flex justify-between items-center mb-6">
-            <h2 className="text-xl font-bold">Profile Settings</h2>
-            <button 
-              onClick={handleSavePortfolio}
-              className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center"
-            >
-              <Save className="w-4 h-4 mr-2" /> Profile Save
-            </button>
+            <h2 className="text-xl font-bold">Main Settings (Hero & Profile)</h2>
+            <div className="flex items-center gap-4">
+              <button 
+                onClick={handleSavePortfolio}
+                disabled={loading}
+                className="bg-blue-600 text-white px-6 py-2 rounded-lg text-sm font-bold flex items-center hover:bg-blue-700 transition disabled:opacity-50"
+              >
+                <Save className="w-4 h-4 mr-2" /> 
+                {loading ? 'Saving...' : 'Save All Changes'}
+              </button>
+            </div>
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Profile Image</label>
-                <div className="flex items-start gap-4">
-                  <div className="w-32 h-32 bg-gray-100 rounded-xl overflow-hidden border border-gray-200 flex items-center justify-center">
-                    {portfolio?.profileImage ? (
-                      <img src={portfolio.profileImage} className="w-full h-full object-cover" />
-                    ) : (
-                      <Upload className="w-8 h-8 text-gray-400" />
-                    )}
-                  </div>
-                  <label className="bg-gray-100 px-4 py-2 rounded-lg text-sm font-medium cursor-pointer hover:bg-gray-200">
-                    Upload Image
-                    <input 
-                      type="file" 
-                      className="hidden" 
-                      accept="image/*"
-                      onChange={(e) => handleImageUpload(e, (url) => setPortfolio({ ...portfolio, profileImage: url }))}
-                    />
-                  </label>
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Introduction</label>
-                <textarea 
-                  className="w-full px-4 py-2 rounded-lg border border-gray-200 min-h-[100px]"
-                  value={portfolio?.profile?.introduction || ''}
-                  onChange={(e) => setPortfolio({ ...portfolio, profile: { ...portfolio.profile, introduction: e.target.value }})}
-                />
-              </div>
-            </div>
-            
-            <div className="space-y-4">
-              {portfolio?.profile?.details?.map((detail: any, idx: number) => (
-                <div key={idx}>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">{detail.label}</label>
+          <div className="space-y-8">
+            {/* Hero Section */}
+            <div className="p-6 bg-gray-50 rounded-xl space-y-4">
+              <h3 className="font-bold text-navy-900 border-b pb-2">Hero Section</h3>
+              <div className="grid grid-cols-1 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Hero Title</label>
                   <input 
                     type="text"
-                    className="w-full px-4 py-2 rounded-lg border border-gray-200"
-                    value={detail.value}
-                    onChange={(e) => {
-                      const newDetails = [...portfolio.profile.details];
-                      newDetails[idx].value = e.target.value;
-                      setPortfolio({ ...portfolio, profile: { ...portfolio.profile, details: newDetails }});
-                    }}
+                    className="w-full px-4 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 outline-none"
+                    value={portfolio?.hero?.title || ''}
+                    onChange={(e) => setPortfolio({ ...portfolio, hero: { ...portfolio.hero, title: e.target.value }})}
                   />
                 </div>
-              ))}
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Hero Subtitle</label>
+                  <textarea 
+                    className="w-full px-4 py-2 rounded-lg border border-gray-200 min-h-[80px] focus:ring-2 focus:ring-blue-500 outline-none"
+                    value={portfolio?.hero?.subtitle || ''}
+                    onChange={(e) => setPortfolio({ ...portfolio, hero: { ...portfolio.hero, subtitle: e.target.value }})}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Profile Image</label>
+                  <div className="flex items-start gap-4">
+                    <div className="w-32 h-32 bg-gray-100 rounded-xl overflow-hidden border border-gray-200 flex items-center justify-center">
+                      {portfolio?.profile?.profileImage ? (
+                        <img src={portfolio.profile.profileImage} className="w-full h-full object-cover" />
+                      ) : (
+                        <Upload className="w-8 h-8 text-gray-400" />
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      <label className="inline-block bg-white border border-gray-200 px-4 py-2 rounded-lg text-sm font-medium cursor-pointer hover:bg-gray-50 transition">
+                        Upload Image
+                        <input 
+                          type="file" 
+                          className="hidden" 
+                          accept="image/*"
+                          onChange={(e) => handleImageUpload(e, (url) => setPortfolio({ ...portfolio, profile: { ...portfolio.profile, profileImage: url } }))}
+                        />
+                      </label>
+                      <p className="text-[10px] text-gray-400 max-w-[150px]">Recommended: Square image, max 1MB for Firestore.</p>
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Introduction</label>
+                  <textarea 
+                    className="w-full px-4 py-2 rounded-lg border border-gray-200 min-h-[100px] focus:ring-2 focus:ring-blue-500 outline-none"
+                    value={portfolio?.profile?.introduction || ''}
+                    onChange={(e) => setPortfolio({ ...portfolio, profile: { ...portfolio.profile, introduction: e.target.value }})}
+                  />
+                </div>
+              </div>
+              
+              <div className="space-y-4">
+                <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest border-b pb-1">Profile Details</h3>
+                {portfolio?.profile?.details?.map((detail: any, idx: number) => (
+                  <div key={idx}>
+                    <label className="block text-xs font-medium text-gray-400 mb-1">{detail.label}</label>
+                    <input 
+                      type="text"
+                      className="w-full px-4 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 outline-none"
+                      value={detail.value}
+                      onChange={(e) => {
+                        const newDetails = [...portfolio.profile.details];
+                        newDetails[idx].value = e.target.value;
+                        setPortfolio({ ...portfolio, profile: { ...portfolio.profile, details: newDetails }});
+                      }}
+                    />
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </div>
