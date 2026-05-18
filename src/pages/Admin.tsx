@@ -17,21 +17,47 @@ export default function Admin({ data, onClose, onSave }: AdminProps) {
 
   useEffect(() => {
     setEditableData(data);
+    
+    // Check if already authorized
+    const checkAuth = async () => {
+      const savedToken = localStorage.getItem("admin_token");
+      if (savedToken === "fake-jwt-token-0925") {
+        console.log("Found valid token in localStorage");
+        setIsAuthorized(true);
+      }
+    };
+    checkAuth();
   }, [data]);
 
   const handleLogin = async (e: FormEvent) => {
     e.preventDefault();
-    const res = await fetch("/api/admin/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password }),
-    });
-    const result = await res.json();
-    if (result.success) {
-      setIsAuthorized(true);
-      localStorage.setItem("admin_token", result.token);
-    } else {
-      alert("비밀번호가 일치하지 않습니다.");
+    console.log("Attempting login...");
+    try {
+      const res = await fetch("/api/admin/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
+      });
+      
+      console.log("Login response status:", res.status);
+      
+      if (res.ok) {
+        const result = await res.json();
+        console.log("Login result:", result);
+        if (result.success) {
+          setIsAuthorized(true);
+          localStorage.setItem("admin_token", result.token);
+        } else {
+          alert("비밀번호가 일치하지 않습니다.");
+        }
+      } else {
+        const errorText = await res.text();
+        console.error("Login failed with status:", res.status, errorText);
+        alert(`로그인 실패: ${res.status}`);
+      }
+    } catch (error) {
+      console.error("Login fetch error:", error);
+      alert("로그인 중 서버 오류가 발생했습니다.");
     }
   };
 

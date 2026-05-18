@@ -3,19 +3,27 @@ import path from "path";
 import fs from "fs";
 import multer from "multer";
 import { createServer as createViteServer } from "vite";
-import { initializeApp } from "firebase/app";
-import { getFirestore, doc, getDoc, setDoc, collection } from "firebase/firestore";
-import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { initializeApp, getApps, cert } from "firebase-admin/app";
+import { getFirestore } from "firebase-admin/firestore";
+import { getStorage } from "firebase-admin/storage";
 import firebaseConfig from "./firebase-applet-config.json" assert { type: "json" };
 
-// Initialize Firebase Client
-const firebaseApp = initializeApp(firebaseConfig);
-const db = getFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId);
-const storage = getStorage(firebaseApp);
+// Initialize Firebase Admin correctly
+if (getApps().length === 0) {
+  initializeApp({
+    projectId: firebaseConfig.projectId,
+    storageBucket: firebaseConfig.storageBucket,
+  });
+}
+
+// Specify the databaseId to avoid PERMISSION_DENIED on the default instance
+const db = getFirestore(firebaseConfig.firestoreDatabaseId);
+const bucket = getStorage().bucket();
 
 const PORT = 3000;
 const DATA_FILE = path.join(process.cwd(), "portfolio.json");
 const ADMIN_PASSWORD = "0925";
+const AUTH_TOKEN = "fake-jwt-token-0925";
 
 // Multer configuration for memory storage (since we upload to Firebase)
 const upload = multer({ storage: multer.memoryStorage() });
@@ -33,16 +41,16 @@ async function startServer() {
   // API Routes
   app.get("/api/portfolio", async (req, res) => {
     try {
-      const docRef = doc(db, "configs", "portfolio");
-      const docSnap = await getDoc(docRef);
-      if (docSnap.exists()) {
+      const docRef = db.collection("configs").doc("portfolio");
+      const docSnap = await docRef.get();
+      if (docSnap.exists) {
         return res.json(docSnap.data());
       }
       
       // Seed if doc doesn't exist
       const localData = JSON.parse(fs.readFileSync(DATA_FILE, "utf-8"));
       try {
-        await setDoc(docRef, localData);
+        await docRef.set(localData);
       } catch (writeError) {
         console.error("Failed to seed firestore:", writeError);
       }
@@ -60,8 +68,9 @@ async function startServer() {
 
   app.post("/api/admin/login", (req, res) => {
     const { password } = req.body;
+    console.log("Login attempt with password:", password);
     if (password === ADMIN_PASSWORD) {
-      res.json({ success: true, token: "fake-jwt-token-0925" });
+      res.json({ success: true, token: AUTH_TOKEN });
     } else {
       res.status(401).json({ success: false, message: "Invalid password" });
     }
@@ -69,14 +78,14 @@ async function startServer() {
 
   app.post("/api/portfolio", async (req, res) => {
     const authToken = req.headers.authorization;
-    if (authToken !== "fake-jwt-token-0925") {
+    if (authToken !== AUTH_TOKEN) {
       return res.status(403).json({ error: "Unauthorized" });
     }
 
     try {
       // Primary: Firestore
-      const docRef = doc(db, "configs", "portfolio");
-      await setDoc(docRef, req.body);
+      const docRef = db.collection("configs").doc("portfolio");
+      await docRef.set(req.body);
       
       // Secondary: Local file backup
       try {
@@ -88,8 +97,6 @@ async function startServer() {
       res.json({ success: true });
     } catch (error) {
       console.error("Save portfolio error:", error);
-      // Even if firestore fails, try to save locally and return success if local works?
-      // For now, let's just try local as secondary.
       try {
         fs.writeFileSync(DATA_FILE, JSON.stringify(req.body, null, 2));
         return res.json({ success: true, message: "Saved to local backup only" });
@@ -101,7 +108,7 @@ async function startServer() {
 
   app.post("/api/upload", upload.single("file"), async (req, res) => {
     const authToken = req.headers.authorization;
-    if (authToken !== "fake-jwt-token-0925") {
+    if (authToken !== AUTH_TOKEN) {
       return res.status(403).json({ error: "Unauthorized" });
     }
 
@@ -112,19 +119,25 @@ async function startServer() {
     try {
       const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
       const filename = `uploads/${uniqueSuffix}${path.extname(req.file.originalname)}`;
-      const storageRef = ref(storage, filename);
+      const file = bucket.file(filename);
 
-      await uploadBytes(storageRef, req.file.buffer, {
-        contentType: req.file.mimetype,
+      await file.save(req.file.buffer, {
+        metadata: {
+          contentType: req.file.mimetype,
+        },
       });
 
-      const publicUrl = await getDownloadURL(storageRef);
+      // Make the file public (simplier for portfolio images)
+      await file.makePublic();
+
+      const publicUrl = `https://storage.googleapis.com/${bucket.name}/${filename}`;
       res.json({ success: true, url: publicUrl });
     } catch (error) {
       console.error("Upload error:", error);
       res.status(500).json({ error: "Failed to upload file to storage" });
     }
   });
+
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
