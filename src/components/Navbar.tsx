@@ -2,11 +2,7 @@ import { motion } from "motion/react";
 import { Menu, X, ShieldCheck } from "lucide-react";
 import { useState } from "react";
 
-interface NavbarProps {
-  onAdminClick: () => void;
-}
-
-export default function Navbar({ onAdminClick }: NavbarProps) {
+export default function Navbar() {
   const [isOpen, setIsOpen] = useState(false);
 
   const navItems = [
@@ -38,23 +34,10 @@ export default function Navbar({ onAdminClick }: NavbarProps) {
                 {item.name}
               </a>
             ))}
-            <button
-              onClick={onAdminClick}
-              className="p-2 text-gray-400 hover:text-blue-600 transition-colors"
-              title="Admin Access"
-            >
-              <ShieldCheck size={20} />
-            </button>
           </div>
 
           {/* Mobile Menu Button */}
-          <div className="md:hidden flex items-center gap-4">
-            <button
-              onClick={onAdminClick}
-              className="p-2 text-gray-400 hover:text-blue-600"
-            >
-              <ShieldCheck size={20} />
-            </button>
+          <div className="md:hidden flex items-center">
             <button
               onClick={() => setIsOpen(!isOpen)}
               className="p-2 text-gray-600 hover:text-blue-600"
