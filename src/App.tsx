@@ -22,14 +22,20 @@ function Home() {
         let portfolioDoc = await getPortfolio();
         let projectsList = await getProjects();
 
-        if (!portfolioDoc || projectsList.length === 0) {
-          console.log("Initializing Firebase with local data...");
+        // Independent initialization to prevent overwriting
+        if (!portfolioDoc) {
+          console.log("Initializing Portfolio in Firebase...");
           const { projects, ...rest } = initialData;
           await savePortfolio(rest);
+          portfolioDoc = rest;
+        }
+
+        if (projectsList.length === 0) {
+          console.log("Initializing Projects in Firebase...");
+          const { projects } = initialData;
           for (const project of (projects as any[])) {
             await saveProject(project.id, project);
           }
-          portfolioDoc = rest;
           projectsList = projects;
         }
 

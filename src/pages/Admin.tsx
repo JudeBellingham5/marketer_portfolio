@@ -39,12 +39,36 @@ export default function Admin() {
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, callback: (url: string) => void) => {
     const file = e.target.files?.[0];
     if (file) {
+      if (file.size > 1024 * 1024) {
+        alert('이미지 크기가 너무 큽니다. 1MB 이하의 이미지를 사용해주세요.');
+        return;
+      }
       const reader = new FileReader();
       reader.onloadend = () => {
         callback(reader.result as string);
       };
       reader.readAsDataURL(file);
     }
+  };
+
+  const updateProfileImage = (url: string) => {
+    // Defensive update: ensure profile object exists
+    setPortfolio((prev: any) => {
+      const current = prev || { profile: {} };
+      return {
+        ...current,
+        profile: {
+          ...(current.profile || {}),
+          profileImage: url
+        }
+      };
+    });
+  };
+
+  const updateProjectImage = (idx: number, url: string) => {
+    const newProjects = [...projects];
+    newProjects[idx] = { ...newProjects[idx], imageUrl: url };
+    setProjects(newProjects);
   };
 
   const handleSavePortfolio = async () => {
@@ -215,7 +239,7 @@ export default function Admin() {
                           type="file" 
                           className="hidden" 
                           accept="image/*"
-                          onChange={(e) => handleImageUpload(e, (url) => setPortfolio({ ...portfolio, profile: { ...portfolio.profile, profileImage: url } }))}
+                          onChange={(e) => handleImageUpload(e, updateProfileImage)}
                         />
                       </label>
                       <p className="text-[10px] text-gray-400 max-w-[150px]">Recommended: Square image, max 1MB for Firestore.</p>
@@ -307,11 +331,7 @@ export default function Admin() {
                       type="file" 
                       className="hidden" 
                       accept="image/*"
-                      onChange={(e) => handleImageUpload(e, (url) => {
-                        const newProjects = [...projects];
-                        newProjects[idx].imageUrl = url;
-                        setProjects(newProjects);
-                      })}
+                      onChange={(e) => handleImageUpload(e, (url) => updateProjectImage(idx, url))}
                     />
                   </label>
                 </div>
