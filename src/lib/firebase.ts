@@ -3,7 +3,7 @@ import { getFirestore, doc, getDoc, setDoc, collection, getDocs, query, orderBy 
 import firebaseConfig from '../../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app);
+export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 
 export const getPortfolio = async () => {
   const docRef = doc(db, 'portfolio', 'main');

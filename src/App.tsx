@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route, Link } from "react-router-dom";
 import { PortfolioData } from "./types";
 import Navbar from "./components/Navbar";
 import Hero from "./components/Hero";
@@ -82,6 +82,7 @@ function Home() {
           <p className="text-sm font-medium text-gray-400">
             © {new Date().getFullYear()} Min Chae Yun. All rights reserved.
           </p>
+          <Link to="/admin" className="text-[10px] text-gray-200 hover:text-gray-400 mt-4 inline-block">Admin</Link>
         </div>
       </footer>
     </div>
