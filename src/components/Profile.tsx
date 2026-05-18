@@ -35,6 +35,7 @@ export default function Profile({ introduction, details, education, certificatio
                       src={profileImage} 
                       alt="민채윤" 
                       className="max-w-full max-h-full object-contain" 
+                      referrerPolicy="no-referrer"
                     />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-gray-400 font-bold text-2xl bg-gradient-to-br from-navy-100 to-navy-200">
