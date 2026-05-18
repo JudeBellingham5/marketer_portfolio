@@ -23,6 +23,7 @@ export default function App() {
   const fetchData = async () => {
     try {
       const res = await fetch("/api/portfolio");
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       const json = await res.json();
       setData(json);
     } catch (error) {

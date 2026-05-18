@@ -3,17 +3,15 @@ import path from "path";
 import fs from "fs";
 import multer from "multer";
 import { createServer as createViteServer } from "vite";
-import admin from "firebase-admin";
+import { initializeApp } from "firebase/app";
+import { getFirestore, doc, getDoc, setDoc, collection } from "firebase/firestore";
+import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import firebaseConfig from "./firebase-applet-config.json" assert { type: "json" };
 
-// Initialize Firebase Admin
-admin.initializeApp({
-  projectId: firebaseConfig.projectId,
-  storageBucket: firebaseConfig.storageBucket,
-});
-
-const db = admin.firestore();
-const bucket = admin.storage().bucket();
+// Initialize Firebase Client
+const firebaseApp = initializeApp(firebaseConfig);
+const db = getFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId);
+const storage = getStorage(firebaseApp);
 
 const PORT = 3000;
 const DATA_FILE = path.join(process.cwd(), "portfolio.json");
@@ -35,18 +33,28 @@ async function startServer() {
   // API Routes
   app.get("/api/portfolio", async (req, res) => {
     try {
-      const doc = await db.collection("configs").doc("portfolio").get();
-      if (doc.exists) {
-        res.json(doc.data());
-      } else {
-        // Fallback to local file or empty data, and seed Firestore
-        const localData = JSON.parse(fs.readFileSync(DATA_FILE, "utf-8"));
-        await db.collection("configs").doc("portfolio").set(localData);
-        res.json(localData);
+      const docRef = doc(db, "configs", "portfolio");
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        return res.json(docSnap.data());
       }
+      
+      // Seed if doc doesn't exist
+      const localData = JSON.parse(fs.readFileSync(DATA_FILE, "utf-8"));
+      try {
+        await setDoc(docRef, localData);
+      } catch (writeError) {
+        console.error("Failed to seed firestore:", writeError);
+      }
+      return res.json(localData);
     } catch (error) {
-      console.error("Read portfolio error:", error);
-      res.status(500).json({ error: "Failed to read data from database" });
+      console.error("Firestore read error, falling back to local file:", error);
+      try {
+        const localData = JSON.parse(fs.readFileSync(DATA_FILE, "utf-8"));
+        return res.json(localData);
+      } catch (fileError) {
+        return res.status(500).json({ error: "Failed to read data from any source" });
+      }
     }
   });
 
@@ -66,11 +74,28 @@ async function startServer() {
     }
 
     try {
-      await db.collection("configs").doc("portfolio").set(req.body);
+      // Primary: Firestore
+      const docRef = doc(db, "configs", "portfolio");
+      await setDoc(docRef, req.body);
+      
+      // Secondary: Local file backup
+      try {
+        fs.writeFileSync(DATA_FILE, JSON.stringify(req.body, null, 2));
+      } catch (fileError) {
+        console.error("Local backup failed:", fileError);
+      }
+      
       res.json({ success: true });
     } catch (error) {
       console.error("Save portfolio error:", error);
-      res.status(500).json({ error: "Failed to save data to database" });
+      // Even if firestore fails, try to save locally and return success if local works?
+      // For now, let's just try local as secondary.
+      try {
+        fs.writeFileSync(DATA_FILE, JSON.stringify(req.body, null, 2));
+        return res.json({ success: true, message: "Saved to local backup only" });
+      } catch (fileError) {
+        res.status(500).json({ error: "Failed to save data to any source" });
+      }
     }
   });
 
@@ -87,18 +112,13 @@ async function startServer() {
     try {
       const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
       const filename = `uploads/${uniqueSuffix}${path.extname(req.file.originalname)}`;
-      const file = bucket.file(filename);
+      const storageRef = ref(storage, filename);
 
-      await file.save(req.file.buffer, {
-        metadata: {
-          contentType: req.file.mimetype,
-        },
+      await uploadBytes(storageRef, req.file.buffer, {
+        contentType: req.file.mimetype,
       });
 
-      // Make the file public (optional, but easier for simple portfolio)
-      await file.makePublic();
-
-      const publicUrl = `https://storage.googleapis.com/${bucket.name}/${filename}`;
+      const publicUrl = await getDownloadURL(storageRef);
       res.json({ success: true, url: publicUrl });
     } catch (error) {
       console.error("Upload error:", error);
