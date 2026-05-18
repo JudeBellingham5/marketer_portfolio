@@ -1,0 +1,20 @@
+{
+  "entities": {
+    "Portfolio": {
+      "title": "Portfolio Data",
+      "description": "Entire portfolio data structure",
+      "type": "object",
+      "properties": {
+        "hero": { "type": "object" },
+        "profile": { "type": "object" },
+        "projects": { "type": "array" }
+      }
+    }
+  },
+  "firestore": {
+    "configs/portfolio": {
+      "schema": "Portfolio",
+      "description": "The current portfolio configuration"
+    }
+  }
+}
