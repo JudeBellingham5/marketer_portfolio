@@ -1,6 +1,9 @@
 import { useState, useEffect, FormEvent, ChangeEvent } from "react";
 import { PortfolioData, Project } from "../types";
 import { X, Save, Lock, LayoutDashboard, FileText, Briefcase, Settings, Upload, Image as ImageIcon, Plus, Trash2, Loader2 } from "lucide-react";
+import { db, storage } from "../lib/firebase";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { doc, getDoc } from "firebase/firestore";
 
 interface AdminProps {
   data: PortfolioData | null;
@@ -31,8 +34,12 @@ export default function Admin({ data, onClose, onSave }: AdminProps) {
 
   const handleLogin = async (e: FormEvent) => {
     e.preventDefault();
+    const ADMIN_PASSWORD = "0925"; // Hardcoded for static site compatibility (Netlify)
+    const AUTH_TOKEN = "token-admin-authorized-0925";
+
     console.log("Attempting login...");
     try {
+      // 1. Try server-side login first (Cloud Run environment)
       const response = await fetch("/api/admin/login", {
         method: "POST",
         headers: { 
@@ -40,23 +47,34 @@ export default function Admin({ data, onClose, onSave }: AdminProps) {
           "Accept": "application/json"
         },
         body: JSON.stringify({ password }),
-      });
+      }).catch(() => null);
       
-      console.log("Login HTTP Status:", response.status);
-      
-      const result = await response.json().catch(() => null);
-      console.log("Login result data:", result);
+      if (response && response.ok) {
+        const result = await response.json();
+        if (result.success) {
+          setIsAuthorized(true);
+          localStorage.setItem("admin_token", result.token);
+          return;
+        }
+      }
 
-      if (response.ok && result?.success) {
+      // 2. Fallback to client-side check if 404 or backend unavailable (Netlify environment)
+      console.log("Falling back to client-side auth check");
+      if (password === ADMIN_PASSWORD) {
         setIsAuthorized(true);
-        localStorage.setItem("admin_token", result.token);
+        localStorage.setItem("admin_token", AUTH_TOKEN);
       } else {
-        const msg = result?.message || "비밀번호가 일치하지 않거나 서버 오류가 발생했습니다.";
-        alert(`로그인 실패 (${response.status}): ${msg}`);
+        alert("비밀번호가 일치하지 않습니다.");
       }
     } catch (error: any) {
-      console.error("Login fetch error:", error);
-      alert(`로그인 요청 중 오류가 발생했습니다: ${error.message}`);
+      console.error("Login error:", error);
+      // Final fallback
+      if (password === ADMIN_PASSWORD) {
+        setIsAuthorized(true);
+        localStorage.setItem("admin_token", AUTH_TOKEN);
+      } else {
+        alert(`로그인 요청 중 오류가 발생했습니다: ${error.message}`);
+      }
     }
   };
 
@@ -110,48 +128,39 @@ export default function Admin({ data, onClose, onSave }: AdminProps) {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // 1. File Size Check (2MB)
     if (file.size > 2 * 1024 * 1024) {
       alert("파일 용량이 너무 큽니다. 2MB 이하의 이미지만 업로드 가능합니다.");
-      e.target.value = ""; // Reset input
+      e.target.value = "";
       return;
     }
 
     setIsUploading(true);
     try {
-      // 2. Image Compression
       let uploadTarget: Blob | File = file;
       if (file.type.startsWith("image/")) {
         try {
           uploadTarget = await compressImage(file);
         } catch (compressError) {
-          console.warn("Compression failed, uploading original:", compressError);
           uploadTarget = file;
         }
       }
 
-      const formData = new FormData();
-      formData.append("file", uploadTarget, file.name);
-
-      const token = localStorage.getItem("admin_token");
-      const res = await fetch("/api/upload", {
-        method: "POST",
-        headers: { "Authorization": token || "" },
-        body: formData,
-      });
-      const result = await res.json();
-      if (result.success) {
-        callback(result.url);
-        alert("이미지 업로드에 성공했습니다.");
-      } else {
-        alert("업로드 실패: " + result.error);
-      }
+      // Use Firebase Storage directly (Works on Netlify)
+      const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+      const filename = `uploads/${uniqueSuffix}_${file.name}`;
+      const storageRef = ref(storage, filename);
+      
+      await uploadBytes(storageRef, uploadTarget);
+      const url = await getDownloadURL(storageRef);
+      
+      callback(url);
+      alert("이미지 업로드에 성공했습니다.");
     } catch (error: any) {
       console.error("Upload error:", error);
-      alert("업로드 중 오류가 발생했습니다.");
+      alert("업로드 중 오류가 발생했습니다. (Firebase Storage 권한을 확인하세요)");
     } finally {
       setIsUploading(false);
-      e.target.value = ""; // Reset input to allow re-upload of same file if needed
+      e.target.value = "";
     }
   };
 
