@@ -33,31 +33,30 @@ export default function Admin({ data, onClose, onSave }: AdminProps) {
     e.preventDefault();
     console.log("Attempting login...");
     try {
-      const res = await fetch("/api/admin/login", {
+      const response = await fetch("/api/admin/login", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
         body: JSON.stringify({ password }),
       });
       
-      console.log("Login response status:", res.status);
+      console.log("Login HTTP Status:", response.status);
       
-      if (res.ok) {
-        const result = await res.json();
-        console.log("Login result:", result);
-        if (result.success) {
-          setIsAuthorized(true);
-          localStorage.setItem("admin_token", result.token);
-        } else {
-          alert("비밀번호가 일치하지 않습니다.");
-        }
+      const result = await response.json().catch(() => null);
+      console.log("Login result data:", result);
+
+      if (response.ok && result?.success) {
+        setIsAuthorized(true);
+        localStorage.setItem("admin_token", result.token);
       } else {
-        const errorText = await res.text();
-        console.error("Login failed with status:", res.status, errorText);
-        alert(`로그인 실패: ${res.status}`);
+        const msg = result?.message || "비밀번호가 일치하지 않거나 서버 오류가 발생했습니다.";
+        alert(`로그인 실패 (${response.status}): ${msg}`);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Login fetch error:", error);
-      alert("로그인 중 서버 오류가 발생했습니다.");
+      alert(`로그인 요청 중 오류가 발생했습니다: ${error.message}`);
     }
   };
 
@@ -186,7 +185,10 @@ export default function Admin({ data, onClose, onSave }: AdminProps) {
                 autoFocus
               />
             </div>
-            <button className="w-full bg-navy-900 text-white py-4 rounded-xl font-bold hover:bg-navy-800 transition-colors">
+            <button 
+              type="submit"
+              className="w-full bg-navy-900 text-white py-4 rounded-xl font-bold hover:bg-navy-800 transition-colors"
+            >
               Login
             </button>
           </form>

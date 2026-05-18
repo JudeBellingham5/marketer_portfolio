@@ -3,71 +3,93 @@ import path from "path";
 import fs from "fs";
 import multer from "multer";
 import { createServer as createViteServer } from "vite";
-import { initializeApp } from "firebase/app";
-import { getFirestore, doc, getDoc, setDoc, collection } from "firebase/firestore";
-import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { initializeApp, getApps, cert } from "firebase-admin/app";
+import { getFirestore } from "firebase-admin/firestore";
+import { getStorage } from "firebase-admin/storage";
 import firebaseConfig from "./firebase-applet-config.json" assert { type: "json" };
 
-// Initialize Firebase Client SDK (preferred for cross-project access in AI Studio)
-const firebaseApp = initializeApp(firebaseConfig);
-const db = getFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId);
-const storage = getStorage(firebaseApp);
+// Initialize Firebase Admin (Server-side)
+// Admin SDK bypasses Security Rules, so it's safer for the node backend.
+if (getApps().length === 0) {
+  initializeApp({
+    projectId: firebaseConfig.projectId,
+    storageBucket: firebaseConfig.storageBucket,
+  });
+}
+
+const db = getFirestore(firebaseConfig.firestoreDatabaseId);
+const bucket = getStorage().bucket();
 
 const PORT = 3000;
 const DATA_FILE = path.join(process.cwd(), "portfolio.json");
 const ADMIN_PASSWORD = "0925";
 const AUTH_TOKEN = "token-admin-authorized-0925";
 
-// Multer configuration for memory storage (since we upload to Firebase)
+// Multer configuration for memory storage
 const upload = multer({ storage: multer.memoryStorage() });
 
 async function startServer() {
   const app = express();
+  
+  // Body parsing middleware
   app.use(express.json());
+  app.use(express.urlencoded({ extended: true }));
 
-  // Serve static files from local uploads (if they exist)
-  const UPLOADS_DIR = path.join(process.cwd(), "public/uploads");
-  if (fs.existsSync(UPLOADS_DIR)) {
-    app.use("/uploads", express.static(UPLOADS_DIR));
-  }
+  // Debug middleware (useful for catching 404s)
+  app.use((req, res, next) => {
+    console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
+    next();
+  });
 
   // API Routes
+  app.get("/api/health", (req, res) => {
+    res.json({ status: "ok", environment: process.env.NODE_ENV || "development" });
+  });
+
   app.get("/api/portfolio", async (req, res) => {
     try {
-      const docRef = doc(db, "configs", "portfolio");
-      const docSnap = await getDoc(docRef);
-      if (docSnap.exists()) {
+      const docRef = db.collection("configs").doc("portfolio");
+      const docSnap = await docRef.get();
+      
+      if (docSnap.exists) {
         return res.json(docSnap.data());
       }
       
       // Seed if doc doesn't exist
-      const localData = JSON.parse(fs.readFileSync(DATA_FILE, "utf-8"));
-      try {
-        await setDoc(docRef, localData);
-      } catch (writeError) {
-        console.error("Failed to seed firestore:", writeError);
-      }
-      return res.json(localData);
-    } catch (error) {
-      console.error("Firestore read error, falling back to local file:", error);
-      try {
+      if (fs.existsSync(DATA_FILE)) {
         const localData = JSON.parse(fs.readFileSync(DATA_FILE, "utf-8"));
+        try {
+          await docRef.set(localData);
+        } catch (writeError) {
+          console.error("Failed to seed firestore:", writeError);
+        }
         return res.json(localData);
-      } catch (fileError) {
-        return res.status(500).json({ error: "Failed to read data from any source" });
       }
+      
+      return res.status(404).json({ error: "Portfolio data not found" });
+    } catch (error) {
+      console.error("Firestore read error:", error);
+      // Fallback to local file if Firestore fails
+      if (fs.existsSync(DATA_FILE)) {
+        try {
+          const localData = JSON.parse(fs.readFileSync(DATA_FILE, "utf-8"));
+          return res.json(localData);
+        } catch (fileError) {
+          console.error("Local file read error:", fileError);
+        }
+      }
+      return res.status(500).json({ error: "Failed to read data from any source" });
     }
   });
 
   app.post("/api/admin/login", (req, res) => {
     const { password } = req.body;
-    console.log("Login attempt...");
+    console.log("Login request received");
+    
     if (password === ADMIN_PASSWORD) {
-      console.log("Login success");
-      res.json({ success: true, token: AUTH_TOKEN });
+      return res.json({ success: true, token: AUTH_TOKEN });
     } else {
-      console.log("Login failed: Password mismatch");
-      res.status(401).json({ success: false, message: "Invalid password" });
+      return res.status(401).json({ success: false, message: "Invalid password" });
     }
   });
 
@@ -79,8 +101,7 @@ async function startServer() {
 
     try {
       // Primary: Firestore
-      const docRef = doc(db, "configs", "portfolio");
-      await setDoc(docRef, req.body);
+      await db.collection("configs").doc("portfolio").set(req.body);
       
       // Secondary: Local file backup
       try {
@@ -92,6 +113,7 @@ async function startServer() {
       res.json({ success: true });
     } catch (error) {
       console.error("Save portfolio error:", error);
+      // Try local save as final fallback
       try {
         fs.writeFileSync(DATA_FILE, JSON.stringify(req.body, null, 2));
         return res.json({ success: true, message: "Saved to local backup only" });
@@ -114,13 +136,18 @@ async function startServer() {
     try {
       const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
       const filename = `uploads/${uniqueSuffix}${path.extname(req.file.originalname)}`;
-      const storageRef = ref(storage, filename);
+      const file = bucket.file(filename);
 
-      await uploadBytes(storageRef, req.file.buffer, {
-        contentType: req.file.mimetype,
+      await file.save(req.file.buffer, {
+        metadata: {
+          contentType: req.file.mimetype,
+        },
       });
 
-      const publicUrl = await getDownloadURL(storageRef);
+      // Make the file public for portfolio access
+      await file.makePublic();
+
+      const publicUrl = `https://storage.googleapis.com/${bucket.name}/${filename}`;
       res.json({ success: true, url: publicUrl });
     } catch (error) {
       console.error("Upload error:", error);
@@ -128,8 +155,12 @@ async function startServer() {
     }
   });
 
+  // Explicitly handle 404 for API routes
+  app.all("/api/*", (req, res) => {
+    res.status(404).json({ error: `API route not found: ${req.method} ${req.url}` });
+  });
 
-  // Vite middleware for development
+  // Vite / Static files
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },
@@ -138,14 +169,21 @@ async function startServer() {
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), "dist");
-    app.use(express.static(distPath));
-    app.get("*", (req, res) => {
-      res.sendFile(path.join(distPath, "index.html"));
-    });
+    if (fs.existsSync(distPath)) {
+      app.use(express.static(distPath));
+      app.get("*", (req, res) => {
+        res.sendFile(path.join(distPath, "index.html"));
+      });
+    } else {
+      console.warn("Dist path not found, API only mode active.");
+      app.get("*", (req, res) => {
+        res.status(500).send("Application not built correctly. Dist folder missing.");
+      });
+    }
   }
 
   app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+    console.log(`Server running on port ${PORT}`);
   });
 }
 
