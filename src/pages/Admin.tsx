@@ -180,11 +180,41 @@ export default function Admin({ data, onClose, onSave }: AdminProps) {
       }
 
       setUploadStatus({ isUploading: true, stage: "서버로 전송 중...", progress: 60 });
+      
+      // 1. Try Server-side upload first (Reliable in Cloud Run / Dev)
+      try {
+        const formData = new FormData();
+        formData.append("file", uploadTarget, file.name);
+        const token = localStorage.getItem("admin_token");
+        
+        const serverRes = await fetch("/api/upload", {
+          method: "POST",
+          headers: { "Authorization": token || "" },
+          body: formData,
+        }).catch(() => null);
+
+        if (serverRes && serverRes.ok) {
+          const result = await serverRes.json();
+          if (result.success) {
+            callback(result.url);
+            alert("이미지 업로드가 완료되었습니다. (서버 저장)");
+            return;
+          }
+        }
+      } catch (serverError) {
+        console.warn("Server upload failed, trying Firebase Storage:", serverError);
+      }
+
+      // 2. Fallback to Firebase Storage (For Netlify / Production)
+      setUploadStatus({ isUploading: true, stage: "Firebase Storage로 전송 중...", progress: 70 });
+      
+      // Sanitize filename: remove special characters and spaces for better CORS/URL compatibility
+      const sanitizedName = file.name.replace(/[^a-zA-Z0-9.]/g, '_');
       const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-      const filename = `uploads/${uniqueSuffix}_${file.name}`;
+      const filename = `uploads/${uniqueSuffix}_${sanitizedName}`;
       const storageRef = ref(storage, filename);
       
-      console.log("Uploading to Firebase Storage:", filename);
+      console.log("Uploading to Firebase Storage (Fallback):", filename);
       await uploadBytes(storageRef, uploadTarget);
       
       setUploadStatus({ isUploading: true, stage: "주소 받아오는 중...", progress: 90 });
@@ -193,12 +223,14 @@ export default function Admin({ data, onClose, onSave }: AdminProps) {
       console.log("URL received:", url);
       
       callback(url);
-      alert("이미지 업로드가 완료되었습니다. 반드시 사이드바의 'Save Changes' 버튼을 눌러 저장해주세요.");
+      alert("이미지 업로드가 완료되었습니다. (Firebase 저장)");
     } catch (error: any) {
       console.error("Upload process error:", error);
       let errorMsg = error.message;
       if (error.code === 'storage/unauthorized') {
-        errorMsg = "권한이 없습니다. Firebase Storage 설정을 확인하거나 다시 로그인해주세요.";
+        errorMsg = "Firebase Storage 권한이 없습니다. 인증 설정을 확인하세요.";
+      } else if (error.message === 'Failed to fetch' || error.name === 'TypeError') {
+        errorMsg = "네트워크 오류 또는 CORS 차단이 발생했습니다. 브라우저에서 '광고 차단기'를 끄거나 Firebase Storage CORS 설정을 확인하세요.";
       }
       alert(`업로드 중 오류가 발생했습니다: ${errorMsg}`);
     } finally {
