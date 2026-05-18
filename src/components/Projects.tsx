@@ -7,6 +7,14 @@ interface ProjectsProps {
 }
 
 export default function Projects({ projects }: ProjectsProps) {
+  const getFullUrl = (path?: string) => {
+    if (!path) return "";
+    if (path.startsWith("http") || path.startsWith("data:")) return path;
+    const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+    const cleanPath = path.startsWith("/") ? path : `/${path}`;
+    return `${base}${cleanPath}`;
+  };
+
   return (
     <section id="projects" className="py-20 bg-navy-50/50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -36,7 +44,7 @@ export default function Projects({ projects }: ProjectsProps) {
                   {project.imageUrl && (
                     <div className="aspect-video w-full overflow-hidden bg-white/5 border-b border-white/10 flex items-center justify-center">
                       <img 
-                        src={project.imageUrl.startsWith('http') ? project.imageUrl : `${import.meta.env.BASE_URL}${project.imageUrl.startsWith('/') ? project.imageUrl.slice(1) : project.imageUrl}`} 
+                        src={getFullUrl(project.imageUrl)} 
                         alt={project.title} 
                         className="max-w-full max-h-full object-contain" 
                       />
