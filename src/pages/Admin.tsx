@@ -21,7 +21,7 @@ export default function Admin({ data, onClose, onSave }: AdminProps) {
     // Check if already authorized
     const checkAuth = async () => {
       const savedToken = localStorage.getItem("admin_token");
-      if (savedToken === "fake-jwt-token-0925") {
+      if (savedToken === "token-admin-authorized-0925") {
         console.log("Found valid token in localStorage");
         setIsAuthorized(true);
       }

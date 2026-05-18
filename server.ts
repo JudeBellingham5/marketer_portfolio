@@ -3,27 +3,20 @@ import path from "path";
 import fs from "fs";
 import multer from "multer";
 import { createServer as createViteServer } from "vite";
-import { initializeApp, getApps, cert } from "firebase-admin/app";
-import { getFirestore } from "firebase-admin/firestore";
-import { getStorage } from "firebase-admin/storage";
+import { initializeApp } from "firebase/app";
+import { getFirestore, doc, getDoc, setDoc, collection } from "firebase/firestore";
+import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import firebaseConfig from "./firebase-applet-config.json" assert { type: "json" };
 
-// Initialize Firebase Admin correctly
-if (getApps().length === 0) {
-  initializeApp({
-    projectId: firebaseConfig.projectId,
-    storageBucket: firebaseConfig.storageBucket,
-  });
-}
-
-// Specify the databaseId to avoid PERMISSION_DENIED on the default instance
-const db = getFirestore(firebaseConfig.firestoreDatabaseId);
-const bucket = getStorage().bucket();
+// Initialize Firebase Client SDK (preferred for cross-project access in AI Studio)
+const firebaseApp = initializeApp(firebaseConfig);
+const db = getFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId);
+const storage = getStorage(firebaseApp);
 
 const PORT = 3000;
 const DATA_FILE = path.join(process.cwd(), "portfolio.json");
 const ADMIN_PASSWORD = "0925";
-const AUTH_TOKEN = "fake-jwt-token-0925";
+const AUTH_TOKEN = "token-admin-authorized-0925";
 
 // Multer configuration for memory storage (since we upload to Firebase)
 const upload = multer({ storage: multer.memoryStorage() });
@@ -41,16 +34,16 @@ async function startServer() {
   // API Routes
   app.get("/api/portfolio", async (req, res) => {
     try {
-      const docRef = db.collection("configs").doc("portfolio");
-      const docSnap = await docRef.get();
-      if (docSnap.exists) {
+      const docRef = doc(db, "configs", "portfolio");
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
         return res.json(docSnap.data());
       }
       
       // Seed if doc doesn't exist
       const localData = JSON.parse(fs.readFileSync(DATA_FILE, "utf-8"));
       try {
-        await docRef.set(localData);
+        await setDoc(docRef, localData);
       } catch (writeError) {
         console.error("Failed to seed firestore:", writeError);
       }
@@ -68,10 +61,12 @@ async function startServer() {
 
   app.post("/api/admin/login", (req, res) => {
     const { password } = req.body;
-    console.log("Login attempt with password:", password);
+    console.log("Login attempt...");
     if (password === ADMIN_PASSWORD) {
+      console.log("Login success");
       res.json({ success: true, token: AUTH_TOKEN });
     } else {
+      console.log("Login failed: Password mismatch");
       res.status(401).json({ success: false, message: "Invalid password" });
     }
   });
@@ -84,8 +79,8 @@ async function startServer() {
 
     try {
       // Primary: Firestore
-      const docRef = db.collection("configs").doc("portfolio");
-      await docRef.set(req.body);
+      const docRef = doc(db, "configs", "portfolio");
+      await setDoc(docRef, req.body);
       
       // Secondary: Local file backup
       try {
@@ -119,18 +114,13 @@ async function startServer() {
     try {
       const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
       const filename = `uploads/${uniqueSuffix}${path.extname(req.file.originalname)}`;
-      const file = bucket.file(filename);
+      const storageRef = ref(storage, filename);
 
-      await file.save(req.file.buffer, {
-        metadata: {
-          contentType: req.file.mimetype,
-        },
+      await uploadBytes(storageRef, req.file.buffer, {
+        contentType: req.file.mimetype,
       });
 
-      // Make the file public (simplier for portfolio images)
-      await file.makePublic();
-
-      const publicUrl = `https://storage.googleapis.com/${bucket.name}/${filename}`;
+      const publicUrl = await getDownloadURL(storageRef);
       res.json({ success: true, url: publicUrl });
     } catch (error) {
       console.error("Upload error:", error);

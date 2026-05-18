@@ -36,7 +36,7 @@ export default function App() {
 
   const handleSaveData = async (newData: PortfolioData) => {
     const token = localStorage.getItem("admin_token");
-    if (!token) {
+    if (!token || token !== "token-admin-authorized-0925") {
       alert("권한이 없습니다. 다시 로그인해 주세요.");
       return;
     }
