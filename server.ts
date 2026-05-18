@@ -28,19 +28,36 @@ async function startServer() {
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
 
-  // Debug middleware
+  // Diagnostic logging for ALL requests
   app.use((req, res, next) => {
-    if (req.url.startsWith("/api")) {
-      console.log(`[API REQUEST] ${new Date().toISOString()} - ${req.method} ${req.url}`);
-    }
+    console.log(`[REQUEST] ${new Date().toISOString()} - ${req.method} ${req.url}`);
     next();
   });
 
-  // API Routes
+  // Health check
   app.get("/api/health", (req, res) => {
-    res.json({ status: "ok", environment: process.env.NODE_ENV || "development" });
+    res.json({ 
+      status: "ok", 
+      env: process.env.NODE_ENV || "development",
+      time: new Date().toISOString()
+    });
   });
 
+  // Simplified login route to debug 404
+  app.post("/api/admin/login", (req, res) => {
+    const { password } = req.body;
+    console.log("Login attempt...");
+    
+    if (password === ADMIN_PASSWORD) {
+      console.log("Login success");
+      return res.json({ success: true, token: AUTH_TOKEN });
+    } else {
+      console.log("Login failed");
+      return res.status(401).json({ success: false, message: "Invalid password" });
+    }
+  });
+
+  // Get portfolio data
   app.get("/api/portfolio", async (req, res) => {
     try {
       const docRef = doc(db, "configs", "portfolio");
@@ -64,32 +81,18 @@ async function startServer() {
       return res.status(404).json({ error: "Portfolio data not found" });
     } catch (error) {
       console.error("Firestore read error:", error);
-      // Fallback to local file if Firestore fails
       if (fs.existsSync(DATA_FILE)) {
         try {
-          const localData = JSON.parse(fs.readFileSync(DATA_FILE, "utf-8"));
-          return res.json(localData);
+          return res.json(JSON.parse(fs.readFileSync(DATA_FILE, "utf-8")));
         } catch (fileError) {
           console.error("Local file read error:", fileError);
         }
       }
-      return res.status(500).json({ error: "Failed to read data from any source. Check Firestore permissions." });
+      return res.status(500).json({ error: "Failed to read data from any source" });
     }
   });
 
-  app.post("/api/admin/login", (req, res) => {
-    const { password } = req.body;
-    console.log("Login attempt...");
-    
-    if (password === ADMIN_PASSWORD) {
-      console.log("Login success");
-      return res.json({ success: true, token: AUTH_TOKEN });
-    } else {
-      console.log("Login failed");
-      return res.status(401).json({ success: false, message: "Invalid password" });
-    }
-  });
-
+  // Update portfolio data
   app.post("/api/portfolio", async (req, res) => {
     const authToken = req.headers.authorization;
     if (authToken !== AUTH_TOKEN) {
@@ -111,12 +114,11 @@ async function startServer() {
       res.json({ success: true });
     } catch (error) {
       console.error("Save portfolio error:", error);
-      // Try local save as final fallback
       try {
         fs.writeFileSync(DATA_FILE, JSON.stringify(req.body, null, 2));
         return res.json({ success: true, message: "Saved to local backup only" });
       } catch (fileError) {
-        res.status(500).json({ error: "Failed to save data. Check Firestore permissions." });
+        res.status(500).json({ error: "Failed to save data." });
       }
     }
   });
@@ -159,11 +161,13 @@ async function startServer() {
     const distPath = path.join(process.cwd(), "dist");
     if (fs.existsSync(distPath)) {
       app.use(express.static(distPath));
+      
+      // Handle all other API requests with 404
+      app.all("/api/*", (req, res) => {
+        res.status(404).json({ error: `API route not found: ${req.method} ${req.url}` });
+      });
+
       app.get("*", (req, res) => {
-        // If it's an API route that wasn't caught, return 404 JSON
-        if (req.url.startsWith("/api/")) {
-          return res.status(404).json({ error: "API route not found" });
-        }
         res.sendFile(path.join(distPath, "index.html"));
       });
     } else {
