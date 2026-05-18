@@ -28,11 +28,11 @@ export default function Projects({ projects }: ProjectsProps) {
               initial={{ opacity: 0, y: 50 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
-              className="grid lg:grid-cols-12 gap-8 items-start"
+              className="grid lg:grid-cols-12 gap-8 lg:items-stretch"
             >
               {/* Project Info Summary */}
               <div className="lg:col-span-12 xl:col-span-5">
-                <div className="bg-navy-900 rounded-2xl overflow-hidden lg:sticky lg:top-24 text-white shadow-xl">
+                <div className="bg-navy-900 rounded-2xl overflow-hidden text-white shadow-xl h-full flex flex-col">
                   {project.imageUrl && (
                     <div className="aspect-video w-full overflow-hidden bg-white/5 border-b border-white/10 flex items-center justify-center">
                       <img 
@@ -42,7 +42,7 @@ export default function Projects({ projects }: ProjectsProps) {
                       />
                     </div>
                   )}
-                  <div className="p-8">
+                  <div className="p-8 flex-1 flex flex-col">
                     <div className="flex items-center gap-2 text-blue-400 mb-4">
                       <span className="text-sm font-bold tracking-widest uppercase">Project 0{index + 1}</span>
                     </div>
@@ -60,7 +60,7 @@ export default function Projects({ projects }: ProjectsProps) {
                         </span>
                       ))}
                     </div>
-                    <div className="pt-6 border-t border-white/10 mb-8">
+                    <div className="pt-6 border-t border-white/10 mb-8 mt-auto">
                       <p className="text-sm font-bold text-blue-400 uppercase tracking-wider mb-2">My Role</p>
                       <p className="text-sm text-navy-200 leading-relaxed">
                         {project.role}
@@ -96,33 +96,33 @@ export default function Projects({ projects }: ProjectsProps) {
               </div>
 
               {/* Project Detail Report */}
-              <div className="lg:col-span-12 xl:col-span-7 space-y-6">
-                <div className="report-card">
+              <div className="lg:col-span-12 xl:col-span-7 flex flex-col gap-6">
+                <div className="report-card flex-1 flex flex-col">
                   <div className="flex items-center gap-2 mb-4">
                     <div className="w-1.5 h-6 bg-blue-600 rounded-full" />
-                    <h4 className="text-lg font-bold">Background</h4>
+                    <h4 className="text-xl font-bold">Background</h4>
                   </div>
-                  <p className="text-gray-600 leading-relaxed">
+                  <p className="text-gray-600 leading-relaxed flex-1 text-lg">
                     {project.background}
                   </p>
                 </div>
 
-                <div className="report-card">
+                <div className="report-card flex-1 flex flex-col">
                   <div className="flex items-center gap-2 mb-4">
                     <div className="w-1.5 h-6 bg-blue-600 rounded-full" />
-                    <h4 className="text-lg font-bold">Process & Content</h4>
+                    <h4 className="text-xl font-bold">Process & Content</h4>
                   </div>
-                  <p className="text-gray-600 leading-relaxed">
+                  <p className="text-gray-600 leading-relaxed flex-1 text-lg">
                     {project.content}
                   </p>
                 </div>
 
-                <div className="report-card bg-blue-50/50 border-blue-100">
+                <div className="report-card bg-blue-50/50 border-blue-100 flex-1 flex flex-col">
                   <div className="flex items-center gap-2 mb-4">
                     <div className="w-1.5 h-6 bg-blue-600 rounded-full" />
-                    <h4 className="text-lg font-bold text-navy-900">Results & Insights</h4>
+                    <h4 className="text-xl font-bold text-navy-900">Results & Insights</h4>
                   </div>
-                  <p className="text-navy-800 leading-relaxed font-medium">
+                  <p className="text-navy-800 leading-relaxed font-medium flex-1 text-lg">
                     {project.result}
                   </p>
                 </div>

@@ -15,19 +15,30 @@ export default function Profile({ introduction, details, education, certificatio
   return (
     <section id="profile" className="py-20 bg-navy-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="grid lg:grid-cols-2 gap-12 items-start">
+        {/* Title Section - Independent & Full Width */}
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          className="mb-12"
+        >
+          <span className="section-label">Profile</span>
+          <h2 className="section-title">전문성을 기반으로 비즈니스의 실질적 성장을 주도합니다</h2>
+          <p className="text-lg text-gray-600 leading-relaxed italic max-w-3xl">
+            "{introduction}"
+          </p>
+        </motion.div>
+
+        {/* Content Section - Balanced 2-Column Grid */}
+        <div className="grid lg:grid-cols-2 gap-8 items-start">
+          {/* Left Column: Profile & Education */}
           <motion.div
             initial={{ opacity: 0, x: -30 }}
             whileInView={{ opacity: 1, x: 0 }}
             viewport={{ once: true }}
+            className="space-y-8"
           >
-            <span className="section-label">Profile</span>
-            <h2 className="section-title">전문성을 기반으로 비즈니스의 실질적 성장을 주도합니다</h2>
-            <p className="text-lg text-gray-600 leading-relaxed italic mb-8">
-              "{introduction}"
-            </p>
-            
-            <div className="p-8 bg-white rounded-2xl shadow-sm border border-gray-100 mb-8">
+            <div className="p-8 bg-white rounded-2xl shadow-sm border border-gray-100">
               <div className="flex flex-col sm:flex-row items-center gap-8">
                 <div className="aspect-square w-48 bg-gray-100 rounded-2xl overflow-hidden shrink-0 flex items-center justify-center border border-gray-200">
                   {profileImage ? (
@@ -43,11 +54,10 @@ export default function Profile({ introduction, details, education, certificatio
                     </div>
                   )}
                 </div>
-                <div>
+                <div className="flex-1">
                   <h3 className="text-2xl font-bold text-navy-900 mb-1">민채윤</h3>
                   <p className="text-blue-600 font-medium mb-4">Marketer</p>
                   <div className="space-y-4">
-                    {/* 프로필 데이터 노출 영역: 이름, 생년월일, 학력, 자격증 등의 텍스트는 portfolio.json에서 수정할 수 있습니다. */}
                     {details.map((detail, index) => (
                       <div key={index}>
                         <dt className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{detail.label}</dt>
@@ -59,7 +69,6 @@ export default function Profile({ introduction, details, education, certificatio
               </div>
             </div>
 
-            {/* Education Layout Improvement */}
             <div className="report-card">
               <div className="flex items-center gap-2 mb-4">
                 <GraduationCap className="text-blue-600" size={20} />
@@ -84,13 +93,13 @@ export default function Profile({ introduction, details, education, certificatio
             </div>
           </motion.div>
 
+          {/* Right Column: Certifications & Languages */}
           <motion.div
             initial={{ opacity: 0, x: 30 }}
             whileInView={{ opacity: 1, x: 0 }}
             viewport={{ once: true }}
             className="space-y-8"
           >
-            {/* Certifications Chips */}
             <div className="report-card">
               <div className="flex items-center gap-2 mb-6">
                 <Award className="text-blue-600" size={20} />
@@ -105,7 +114,6 @@ export default function Profile({ introduction, details, education, certificatio
               </div>
             </div>
 
-            {/* Languages Chips */}
             <div className="report-card">
               <div className="flex items-center gap-2 mb-6">
                 <Globe className="text-blue-600" size={20} />
