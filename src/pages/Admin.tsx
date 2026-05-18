@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Lock, Save, ArrowLeft, Upload, Plus, Trash2 } from 'lucide-react';
+import { Lock, Save, ArrowLeft, Upload, Plus, Trash2, X } from 'lucide-react';
 import { getPortfolio, getProjects, savePortfolio, saveProject, db } from '../lib/firebase';
 import { doc, deleteDoc } from 'firebase/firestore';
 
@@ -39,13 +39,43 @@ export default function Admin() {
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, callback: (url: string) => void) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (file.size > 1024 * 1024) {
-        alert('이미지 크기가 너무 큽니다. 1MB 이하의 이미지를 사용해주세요.');
+      if (file.size > 2 * 1024 * 1024) {
+        alert('이미지 크기가 너무 큽니다. 2MB 이하의 이미지를 사용해주세요.');
         return;
       }
+      
       const reader = new FileReader();
-      reader.onloadend = () => {
-        callback(reader.result as string);
+      reader.onload = (event) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+          
+          // Max dimension 1200px
+          const MAX_SIZE = 1200;
+          if (width > height) {
+            if (width > MAX_SIZE) {
+              height *= MAX_SIZE / width;
+              width = MAX_SIZE;
+            }
+          } else {
+            if (height > MAX_SIZE) {
+              width *= MAX_SIZE / height;
+              height = MAX_SIZE;
+            }
+          }
+          
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx?.drawImage(img, 0, 0, width, height);
+          
+          // Export as JPEG with 0.7 quality to save space
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+          callback(dataUrl);
+        };
+        img.src = event.target?.result as string;
       };
       reader.readAsDataURL(file);
     }
@@ -69,6 +99,18 @@ export default function Admin() {
     const newProjects = [...projects];
     newProjects[idx] = { ...newProjects[idx], imageUrl: url };
     setProjects(newProjects);
+  };
+
+  const addCompetency = () => {
+    const newItems = [...(portfolio?.competencies?.items || [])];
+    newItems.push({ title: 'New Competency', description: '' });
+    setPortfolio({ ...portfolio, competencies: { ...(portfolio?.competencies || {}), items: newItems } });
+  };
+
+  const removeCompetency = (idx: number) => {
+    const newItems = [...portfolio.competencies.items];
+    newItems.splice(idx, 1);
+    setPortfolio({ ...portfolio, competencies: { ...portfolio.competencies, items: newItems } });
   };
 
   const handleSavePortfolio = async () => {
@@ -145,7 +187,7 @@ export default function Admin() {
               type="password"
               placeholder="Enter password (1902)"
               className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              value={password}
+              value={password || ''}
               onChange={(e) => setPassword(e.target.value)}
             />
             <button
@@ -264,7 +306,7 @@ export default function Admin() {
                     <input 
                       type="text"
                       className="w-full px-4 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 outline-none"
-                      value={detail.value}
+                      value={detail.value || ''}
                       onChange={(e) => {
                         const newDetails = [...portfolio.profile.details];
                         newDetails[idx].value = e.target.value;
@@ -273,6 +315,226 @@ export default function Admin() {
                     />
                   </div>
                 ))}
+              </div>
+            </div>
+
+            {/* Education & Languages Section */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-8 border-t border-gray-100">
+              <div className="space-y-4">
+                <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest border-b pb-1">Education</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-1">School</label>
+                    <input 
+                      type="text" 
+                      className="w-full px-3 py-2 rounded border border-gray-200 text-sm"
+                      value={portfolio?.profile?.education?.school || ''}
+                      onChange={(e) => setPortfolio({ ...portfolio, profile: { ...portfolio.profile, education: { ...portfolio.profile.education, school: e.target.value }}})}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-1">Major</label>
+                    <input 
+                      type="text" 
+                      className="w-full px-3 py-2 rounded border border-gray-200 text-sm"
+                      value={portfolio?.profile?.education?.major || ''}
+                      onChange={(e) => setPortfolio({ ...portfolio, profile: { ...portfolio.profile, education: { ...portfolio.profile.education, major: e.target.value }}})}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-1">Double Major</label>
+                    <input 
+                      type="text" 
+                      className="w-full px-3 py-2 rounded border border-gray-200 text-sm"
+                      value={portfolio?.profile?.education?.doubleMajor || ''}
+                      onChange={(e) => setPortfolio({ ...portfolio, profile: { ...portfolio.profile, education: { ...portfolio.profile.education, doubleMajor: e.target.value }}})}
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-xs text-gray-400 mb-1">GPA</label>
+                      <input 
+                        type="text" 
+                        className="w-full px-3 py-2 rounded border border-gray-200 text-sm"
+                        value={portfolio?.profile?.education?.gpa || ''}
+                        onChange={(e) => setPortfolio({ ...portfolio, profile: { ...portfolio.profile, education: { ...portfolio.profile.education, gpa: e.target.value }}})}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-400 mb-1">Max</label>
+                      <input 
+                        type="text" 
+                        className="w-full px-3 py-2 rounded border border-gray-200 text-sm"
+                        value={portfolio?.profile?.education?.maxGpa || ''}
+                        onChange={(e) => setPortfolio({ ...portfolio, profile: { ...portfolio.profile, education: { ...portfolio.profile.education, maxGpa: e.target.value }}})}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest border-b pb-1 pt-4">Languages</h3>
+                <div className="space-y-2">
+                  {portfolio?.profile?.languages?.map((lang: string, idx: number) => (
+                    <div key={idx} className="flex gap-2">
+                      <input 
+                        type="text" 
+                        className="grow px-3 py-1 rounded border border-gray-200 text-sm"
+                        value={lang || ''}
+                        onChange={(e) => {
+                          const newLangs = [...portfolio.profile.languages];
+                          newLangs[idx] = e.target.value;
+                          setPortfolio({ ...portfolio, profile: { ...portfolio.profile, languages: newLangs }});
+                        }}
+                      />
+                      <button 
+                         onClick={() => {
+                           const newLangs = portfolio.profile.languages.filter((_: any, i: number) => i !== idx);
+                           setPortfolio({ ...portfolio, profile: { ...portfolio.profile, languages: newLangs }});
+                         }}
+                         className="text-red-500 hover:bg-red-50 px-2 rounded"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                  <button 
+                    onClick={() => {
+                      const newLangs = [...(portfolio?.profile?.languages || []), ''];
+                      setPortfolio({ ...portfolio, profile: { ...portfolio.profile, languages: newLangs }});
+                    }}
+                    className="text-blue-600 text-xs font-bold flex items-center mt-2"
+                  >
+                    <Plus className="w-3 h-3 mr-1" /> Add Language
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest border-b pb-1">Certifications</h3>
+                <div className="space-y-2">
+                  {portfolio?.profile?.certifications?.map((cert: any, idx: number) => (
+                    <div key={cert.id} className="flex gap-2">
+                      <input 
+                        type="text" 
+                        className="grow px-3 py-1 rounded border border-gray-200 text-sm"
+                        value={cert.name || ''}
+                        onChange={(e) => {
+                          const newCerts = [...portfolio.profile.certifications];
+                          newCerts[idx].name = e.target.value;
+                          setPortfolio({ ...portfolio, profile: { ...portfolio.profile, certifications: newCerts }});
+                        }}
+                      />
+                      <button 
+                         onClick={() => {
+                           const newCerts = portfolio.profile.certifications.filter((_: any, i: number) => i !== idx);
+                           setPortfolio({ ...portfolio, profile: { ...portfolio.profile, certifications: newCerts }});
+                         }}
+                         className="text-red-500 hover:bg-red-50 px-2 rounded"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                  <button 
+                    onClick={() => {
+                      const newCerts = [...(portfolio?.profile?.certifications || []), { id: `cert-${Date.now()}`, name: '' }];
+                      setPortfolio({ ...portfolio, profile: { ...portfolio.profile, certifications: newCerts }});
+                    }}
+                    className="text-blue-600 text-xs font-bold flex items-center mt-2"
+                  >
+                    <Plus className="w-3 h-3 mr-1" /> Add Certification
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Competencies Section */}
+        <div className="bg-white rounded-2xl p-8 shadow-sm border border-gray-100">
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-xl font-bold">Competencies</h2>
+            <button 
+              onClick={addCompetency}
+              className="bg-gray-900 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center"
+            >
+              <Plus className="w-4 h-4 mr-2" /> Add Item
+            </button>
+          </div>
+          
+          <div className="space-y-6">
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Introduction</label>
+              <textarea 
+                className="w-full px-4 py-2 rounded-lg border border-gray-200 min-h-[80px] focus:ring-2 focus:ring-blue-500 outline-none"
+                value={portfolio?.competencies?.introduction || ''}
+                onChange={(e) => setPortfolio({ ...portfolio, competencies: { ...portfolio.competencies, introduction: e.target.value }})}
+              />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {portfolio?.competencies?.items?.map((item: any, idx: number) => (
+                <div key={idx} className="p-4 bg-gray-50 rounded-xl relative group">
+                  <button 
+                    onClick={() => removeCompetency(idx)}
+                    className="absolute top-2 right-2 p-1 text-red-500 opacity-0 group-hover:opacity-100 transition"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                  <input 
+                    className="block w-full font-bold bg-transparent border-b border-transparent focus:border-blue-500 outline-none mb-2"
+                    value={item.title || ''}
+                    onChange={(e) => {
+                      const newItems = [...portfolio.competencies.items];
+                      newItems[idx].title = e.target.value;
+                      setPortfolio({ ...portfolio, competencies: { ...portfolio.competencies, items: newItems }});
+                    }}
+                  />
+                  <textarea 
+                    className="w-full bg-transparent border-none focus:ring-0 text-sm text-gray-600 resize-none"
+                    value={item.description || ''}
+                    rows={3}
+                    onChange={(e) => {
+                      const newItems = [...portfolio.competencies.items];
+                      newItems[idx].description = e.target.value;
+                      setPortfolio({ ...portfolio, competencies: { ...portfolio.competencies, items: newItems }});
+                    }}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Global Sections (Trust & Contact) */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <div className="bg-white rounded-2xl p-8 shadow-sm border border-gray-100">
+            <h2 className="text-xl font-bold mb-6">Trust Statement</h2>
+            <textarea 
+              className="w-full px-4 py-2 rounded-lg border border-gray-200 min-h-[150px] focus:ring-2 focus:ring-blue-500 outline-none"
+              value={portfolio?.trust?.content || ''}
+              onChange={(e) => setPortfolio({ ...portfolio, trust: { content: e.target.value }})}
+            />
+          </div>
+          <div className="bg-white rounded-2xl p-8 shadow-sm border border-gray-100">
+            <h2 className="text-xl font-bold mb-6">Contact Info</h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Email</label>
+                <input 
+                  type="email"
+                  className="w-full px-4 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 outline-none"
+                  value={portfolio?.contact?.email || ''}
+                  onChange={(e) => setPortfolio({ ...portfolio, contact: { ...portfolio.contact, email: e.target.value }})}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Contact Content</label>
+                <textarea 
+                  className="w-full px-4 py-2 rounded-lg border border-gray-200 min-h-[85px] focus:ring-2 focus:ring-blue-500 outline-none"
+                  value={portfolio?.contact?.content || ''}
+                  onChange={(e) => setPortfolio({ ...portfolio, contact: { ...portfolio.contact, content: e.target.value }})}
+                />
               </div>
             </div>
           </div>
@@ -295,7 +557,7 @@ export default function Admin() {
               <div className="flex justify-between items-start">
                 <input 
                   className="text-lg font-bold bg-transparent border-b border-transparent focus:border-blue-500 focus:outline-none"
-                  value={project.title}
+                  value={project.title || ''}
                   onChange={(e) => {
                     const newProjects = [...projects];
                     newProjects[idx].title = e.target.value;
@@ -337,29 +599,141 @@ export default function Admin() {
                 </div>
 
                 <div className="md:col-span-2 space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Summary</label>
+                      <textarea 
+                        className="w-full px-4 py-2 rounded-lg border border-gray-200 min-h-[60px]"
+                        value={project.summary || ''}
+                        onChange={(e) => {
+                          const newProjects = [...projects];
+                          newProjects[idx].summary = e.target.value;
+                          setProjects(newProjects);
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Role</label>
+                      <textarea 
+                        className="w-full px-4 py-2 rounded-lg border border-gray-200 min-h-[60px]"
+                        value={project.role || ''}
+                        onChange={(e) => {
+                          const newProjects = [...projects];
+                          newProjects[idx].role = e.target.value;
+                          setProjects(newProjects);
+                        }}
+                      />
+                    </div>
+                  </div>
+                  
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Summary</label>
+                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Background</label>
                     <textarea 
-                      className="w-full px-4 py-2 rounded-lg border border-gray-200"
-                      value={project.summary}
+                      className="w-full px-4 py-2 rounded-lg border border-gray-200 min-h-[80px]"
+                      value={project.background || ''}
                       onChange={(e) => {
                         const newProjects = [...projects];
-                        newProjects[idx].summary = e.target.value;
+                        newProjects[idx].background = e.target.value;
                         setProjects(newProjects);
                       }}
                     />
                   </div>
+
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
-                    <input 
-                      className="w-full px-4 py-2 rounded-lg border border-gray-200"
-                      value={project.role}
+                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Detailed Content</label>
+                    <textarea 
+                      className="w-full px-4 py-2 rounded-lg border border-gray-200 min-h-[100px]"
+                      value={project.content || ''}
                       onChange={(e) => {
                         const newProjects = [...projects];
-                        newProjects[idx].role = e.target.value;
+                        newProjects[idx].content = e.target.value;
                         setProjects(newProjects);
                       }}
                     />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Result</label>
+                      <textarea 
+                        className="w-full px-4 py-2 rounded-lg border border-gray-200 min-h-[80px]"
+                        value={project.result || ''}
+                        onChange={(e) => {
+                          const newProjects = [...projects];
+                          newProjects[idx].result = e.target.value;
+                          setProjects(newProjects);
+                        }}
+                      />
+                    </div>
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Project Link (Optional)</label>
+                        <input 
+                          className="w-full px-4 py-2 rounded-lg border border-gray-200"
+                          value={project.projectUrl || ''}
+                          onChange={(e) => {
+                            const newProjects = [...projects];
+                            newProjects[idx].projectUrl = e.target.value;
+                            setProjects(newProjects);
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">PPT URL</label>
+                        <input 
+                          className="w-full px-4 py-2 rounded-lg border border-gray-200"
+                          value={project.pptUrl || ''}
+                          onChange={(e) => {
+                            const newProjects = [...projects];
+                            newProjects[idx].pptUrl = e.target.value;
+                            setProjects(newProjects);
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Keywords</label>
+                        <div className="flex flex-wrap gap-2 mb-2">
+                          {project.keywords?.map((keyword: string, kIdx: number) => (
+                            <div key={kIdx} className="flex items-center gap-1 bg-blue-50 text-blue-700 px-2 py-1 rounded-lg text-xs font-medium border border-blue-100">
+                              <input 
+                                type="text"
+                                className="bg-transparent border-none focus:ring-0 min-w-[60px] max-w-[120px] px-0 py-0"
+                                value={keyword || ''}
+                                onChange={(e) => {
+                                  const newProjects = [...projects];
+                                  const newKeywords = [...newProjects[idx].keywords];
+                                  newKeywords[kIdx] = e.target.value;
+                                  newProjects[idx].keywords = newKeywords;
+                                  setProjects(newProjects);
+                                }}
+                              />
+                              <button 
+                                onClick={() => {
+                                  const newProjects = [...projects];
+                                  newProjects[idx].keywords = newProjects[idx].keywords.filter((_: any, i: number) => i !== kIdx);
+                                  setProjects(newProjects);
+                                }}
+                                className="hover:text-blue-900"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                          ))}
+                          <button 
+                            onClick={() => {
+                              const newProjects = [...projects];
+                              const newKeywords = [...(newProjects[idx].keywords || [])];
+                              newKeywords.push('');
+                              newProjects[idx].keywords = newKeywords;
+                              setProjects(newProjects);
+                            }}
+                            className="bg-gray-100 text-gray-500 px-3 py-1 rounded-lg text-[10px] font-bold uppercase hover:bg-gray-200 flex items-center gap-1 transition"
+                          >
+                            <Plus className="w-3 h-3" /> Add Keyword
+                          </button>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>

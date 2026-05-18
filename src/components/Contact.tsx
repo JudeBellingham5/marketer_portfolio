@@ -42,14 +42,7 @@ export default function Contact({ email, content }: ContactProps) {
           </motion.div>
         </div>
 
-        <div className="mt-24 pt-8 border-t border-white/10 flex flex-col md:flex-row justify-between items-center gap-4 text-navy-400 text-sm">
-          <p>© 2024 Min Chae-yun. All rights reserved.</p>
-          <div className="flex gap-8">
-            <a href="#" className="hover:text-white transition-colors">LinkedIn</a>
-            <a href="#" className="hover:text-white transition-colors">GitHub</a>
-            <a href="#" className="hover:text-white transition-colors">Notion</a>
-          </div>
-        </div>
+        {/* No footer bottom links as requested */}
       </div>
     </footer>
   );
