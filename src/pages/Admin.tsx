@@ -466,7 +466,7 @@ export default function Admin({ data, onClose, onSave }: AdminProps) {
                 </div>
                 <div className="grid md:grid-cols-2 gap-4">
                   {editableData.profile.details.map((detail, idx) => (
-                    <div key={idx} className="p-4 bg-gray-50 rounded-xl border border-gray-100 space-y-3">
+                    <div key={`detail-${idx}`} className="p-4 bg-gray-50 rounded-xl border border-gray-100 space-y-3">
                       <div className="flex justify-between items-start">
                          <input
                           className="text-[10px] font-bold text-gray-400 uppercase tracking-widest bg-transparent border-b border-gray-200"
@@ -496,6 +496,90 @@ export default function Admin({ data, onClose, onSave }: AdminProps) {
                           setEditableData({ ...editableData, profile: { ...editableData.profile, details: newDetails } });
                         }}
                       />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Certifications Management */}
+              <div className="space-y-6">
+                <div className="flex justify-between items-center">
+                  <h3 className="text-2xl font-bold">Certifications</h3>
+                  <button 
+                    onClick={() => {
+                      const newCerts = [...editableData.profile.certifications, { id: `cert-${Date.now()}`, name: "New Certification" }];
+                      setEditableData({ ...editableData, profile: { ...editableData.profile, certifications: newCerts } });
+                    }}
+                    className="flex items-center gap-2 text-sm font-bold text-blue-600 px-4 py-2 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors"
+                  >
+                    <Plus size={16} /> Add Certification
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-3">
+                  {editableData.profile.certifications.map((cert) => (
+                    <div key={cert.id} className="bg-navy-900 text-white pl-4 pr-2 py-2 rounded-xl flex items-center gap-2 shadow-sm">
+                      <input
+                        className="bg-transparent text-xs font-semibold focus:outline-none placeholder:text-white/50"
+                        value={cert.name}
+                        placeholder="Certification name"
+                        onChange={(e) => {
+                          const newCerts = editableData.profile.certifications.map(c => 
+                            c.id === cert.id ? { ...c, name: e.target.value } : c
+                          );
+                          setEditableData({ ...editableData, profile: { ...editableData.profile, certifications: newCerts } });
+                        }}
+                      />
+                      <button 
+                        onClick={() => {
+                          const newCerts = editableData.profile.certifications.filter(c => c.id !== cert.id);
+                          setEditableData({ ...editableData, profile: { ...editableData.profile, certifications: newCerts } });
+                        }}
+                        className="p-1 text-white/50 hover:text-white transition-colors"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Languages Management */}
+              <div className="space-y-6">
+                <div className="flex justify-between items-center">
+                  <h3 className="text-2xl font-bold">Languages</h3>
+                  <button 
+                    onClick={() => {
+                      const newLangs = [...editableData.profile.languages, "New Language"];
+                      setEditableData({ ...editableData, profile: { ...editableData.profile, languages: newLangs } });
+                    }}
+                    className="flex items-center gap-2 text-sm font-bold text-blue-600 px-4 py-2 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors"
+                  >
+                    <Plus size={16} /> Add Language
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-3">
+                  {editableData.profile.languages.map((lang, idx) => (
+                    <div key={`lang-${idx}`} className="bg-white border border-gray-100 pl-4 pr-2 py-2 rounded-xl flex items-center gap-3 shadow-sm">
+                      <div className="w-2 h-2 rounded-full bg-blue-500 shrink-0" />
+                      <input
+                        className="bg-transparent text-sm font-bold text-navy-900 focus:outline-none placeholder:text-gray-400"
+                        value={lang}
+                        placeholder="e.g. TOEIC 900"
+                        onChange={(e) => {
+                          const newLangs = [...editableData.profile.languages];
+                          newLangs[idx] = e.target.value;
+                          setEditableData({ ...editableData, profile: { ...editableData.profile, languages: newLangs } });
+                        }}
+                      />
+                      <button 
+                        onClick={() => {
+                          const newLangs = editableData.profile.languages.filter((_, i) => i !== idx);
+                          setEditableData({ ...editableData, profile: { ...editableData.profile, languages: newLangs } });
+                        }}
+                        className="p-1 text-gray-300 hover:text-red-400 transition-colors"
+                      >
+                        <X size={14} />
+                      </button>
                     </div>
                   ))}
                 </div>

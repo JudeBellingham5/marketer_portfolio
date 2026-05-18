@@ -1,12 +1,12 @@
 import { motion } from "motion/react";
-import { PortfolioDetail, Education } from "../types";
+import { PortfolioDetail, Education, Certification } from "../types";
 import { Award, Globe, GraduationCap } from "lucide-react";
 
 interface ProfileProps {
   introduction: string;
   details: PortfolioDetail[];
   education: Education;
-  certifications: string[];
+  certifications: Certification[];
   languages: string[];
   profileImage?: string;
 }
@@ -97,8 +97,8 @@ export default function Profile({ introduction, details, education, certificatio
               </div>
               <div className="flex flex-wrap gap-2">
                 {certifications.map((cert) => (
-                  <span key={cert} className="px-4 py-2 bg-navy-900 text-white text-xs font-semibold rounded-lg shadow-sm">
-                    {cert}
+                  <span key={cert.id} className="px-4 py-2 bg-navy-900 text-white text-xs font-semibold rounded-lg shadow-sm">
+                    {cert.name}
                   </span>
                 ))}
               </div>

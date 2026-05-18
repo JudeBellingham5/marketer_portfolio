@@ -11,6 +11,11 @@ export interface Education {
   maxGpa: string;
 }
 
+export interface Certification {
+  id: string;
+  name: string;
+}
+
 export interface CompetencyItem {
   title: string;
   description: string;
@@ -39,7 +44,7 @@ export interface PortfolioData {
     introduction: string;
     profileImage?: string;
     education: Education;
-    certifications: string[];
+    certifications: Certification[];
     languages: string[];
     details: PortfolioDetail[];
   };
