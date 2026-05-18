@@ -1,9 +1,10 @@
 import { useState, useEffect, FormEvent, ChangeEvent } from "react";
 import { PortfolioData, Project } from "../types";
-import { X, Save, Lock, LayoutDashboard, FileText, Briefcase, Settings, Upload, Image as ImageIcon, Plus, Trash2, Loader2 } from "lucide-react";
-import { db, storage } from "../lib/firebase";
+import { X, Save, Lock, LayoutDashboard, FileText, Briefcase, Settings, Upload, Image as ImageIcon, Plus, Trash2, Loader2, AlertCircle } from "lucide-react";
+import { db, storage, auth } from "../lib/firebase";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { doc, getDoc } from "firebase/firestore";
+import { signInAnonymously } from "firebase/auth";
 
 interface AdminProps {
   data: PortfolioData | null;
@@ -16,7 +17,11 @@ export default function Admin({ data, onClose, onSave }: AdminProps) {
   const [isAuthorized, setIsAuthorized] = useState(false);
   const [editableData, setEditableData] = useState<PortfolioData | null>(data);
   const [activeTab, setActiveTab] = useState("hero");
-  const [isUploading, setIsUploading] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState<{ isUploading: boolean; stage: string; progress: number }>({
+    isUploading: false,
+    stage: "",
+    progress: 0
+  });
 
   useEffect(() => {
     setEditableData(data);
@@ -61,6 +66,15 @@ export default function Admin({ data, onClose, onSave }: AdminProps) {
       // 2. Fallback to client-side check if 404 or backend unavailable (Netlify environment)
       console.log("Falling back to client-side auth check");
       if (password === ADMIN_PASSWORD) {
+        // Sign in to Firebase Auth to allow Storage writes
+        try {
+          await signInAnonymously(auth);
+          console.log("Firebase Anonymous Auth successful");
+        } catch (authError) {
+          console.error("Firebase Auth failed:", authError);
+          // Still proceed, maybe rules allow public write (though unlikely)
+        }
+        
         setIsAuthorized(true);
         localStorage.setItem("admin_token", AUTH_TOKEN);
       } else {
@@ -138,19 +152,26 @@ export default function Admin({ data, onClose, onSave }: AdminProps) {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 5 * 1024 * 1024) {
-      alert("파일 용량이 너무 큽니다. 5MB 이하의 이미지만 업로드 가능합니다.");
+    if (file.size > 10 * 1024 * 1024) {
+      alert("파일 용량이 너무 큽니다. 10MB 이하의 이미지만 업로드 가능합니다.");
       e.target.value = "";
       return;
     }
 
-    setIsUploading(true);
+    setUploadStatus({ isUploading: true, stage: "초기화 중...", progress: 10 });
     console.log("Starting upload for:", file.name);
+    
+    // Safety timeout to ensure UI doesn't hang forever
+    const uploadTimeout = setTimeout(() => {
+      setUploadStatus(prev => ({ ...prev, isUploading: false }));
+      alert("업로드 시간이 초과되었습니다. 네트워크 상태를 확인하시거나 다시 시도해주세요.");
+    }, 60000);
+
     try {
       let uploadTarget: Blob | File = file;
       if (file.type.startsWith("image/")) {
         try {
-          console.log("Compressing...");
+          setUploadStatus({ isUploading: true, stage: "이미지 압축 중...", progress: 30 });
           uploadTarget = await compressImage(file);
         } catch (compressError) {
           console.warn("Compression failed, using original:", compressError);
@@ -158,6 +179,7 @@ export default function Admin({ data, onClose, onSave }: AdminProps) {
         }
       }
 
+      setUploadStatus({ isUploading: true, stage: "서버로 전송 중...", progress: 60 });
       const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
       const filename = `uploads/${uniqueSuffix}_${file.name}`;
       const storageRef = ref(storage, filename);
@@ -165,6 +187,7 @@ export default function Admin({ data, onClose, onSave }: AdminProps) {
       console.log("Uploading to Firebase Storage:", filename);
       await uploadBytes(storageRef, uploadTarget);
       
+      setUploadStatus({ isUploading: true, stage: "주소 받아오는 중...", progress: 90 });
       console.log("Fetching download URL...");
       const url = await getDownloadURL(storageRef);
       console.log("URL received:", url);
@@ -173,9 +196,14 @@ export default function Admin({ data, onClose, onSave }: AdminProps) {
       alert("이미지 업로드가 완료되었습니다. 반드시 사이드바의 'Save Changes' 버튼을 눌러 저장해주세요.");
     } catch (error: any) {
       console.error("Upload process error:", error);
-      alert(`업로드 중 오류가 발생했습니다: ${error.message}\n\nFirebase Storage의 '인증된 사용자' 쓰기 권한이 필요합니다.`);
+      let errorMsg = error.message;
+      if (error.code === 'storage/unauthorized') {
+        errorMsg = "권한이 없습니다. Firebase Storage 설정을 확인하거나 다시 로그인해주세요.";
+      }
+      alert(`업로드 중 오류가 발생했습니다: ${errorMsg}`);
     } finally {
-      setIsUploading(false);
+      clearTimeout(uploadTimeout);
+      setUploadStatus({ isUploading: false, stage: "", progress: 100 });
       e.target.value = "";
     }
   };
@@ -253,10 +281,10 @@ export default function Admin({ data, onClose, onSave }: AdminProps) {
         <div className="p-4 border-t border-white/10">
           <button
             onClick={handleSave}
-            disabled={isUploading}
+            disabled={uploadStatus.isUploading}
             className="w-full bg-blue-600 flex items-center justify-center gap-2 py-3 rounded-xl font-bold hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-wait"
           >
-            {isUploading ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />}
+            {uploadStatus.isUploading ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />}
             Save Changes
           </button>
           <button
@@ -270,10 +298,18 @@ export default function Admin({ data, onClose, onSave }: AdminProps) {
 
       {/* Admin Content */}
       <div className="flex-1 overflow-y-auto p-8 bg-white/50 backdrop-blur-3xl">
-        {isUploading && (
-          <div className="fixed top-8 right-8 z-[70] bg-blue-600 text-white px-6 py-3 rounded-xl shadow-2xl flex items-center gap-3 animate-bounce">
-            <Loader2 className="animate-spin" size={20} />
-            <span className="font-bold text-sm">업로드 중...</span>
+        {uploadStatus.isUploading && (
+          <div className="fixed top-8 right-8 z-[70] bg-blue-600 text-white px-6 py-4 rounded-2xl shadow-2xl flex flex-col gap-2 min-w-[200px]">
+            <div className="flex items-center gap-3">
+              <Loader2 className="animate-spin" size={20} />
+              <span className="font-bold text-sm">{uploadStatus.stage}</span>
+            </div>
+            <div className="w-full bg-blue-400 h-1 rounded-full overflow-hidden">
+              <div 
+                className="bg-white h-full transition-all duration-300" 
+                style={{ width: `${uploadStatus.progress}%` }}
+              />
+            </div>
           </div>
         )}
 
@@ -338,7 +374,7 @@ export default function Admin({ data, onClose, onSave }: AdminProps) {
                         type="file"
                         className="hidden"
                         accept="image/*"
-                        disabled={isUploading}
+                        disabled={uploadStatus.isUploading}
                         onChange={(e) => handleFileUpload(e, (url) => {
                           if (editableData) {
                             setEditableData({ ...editableData, profile: { ...editableData.profile, profileImage: url } });
@@ -543,7 +579,7 @@ export default function Admin({ data, onClose, onSave }: AdminProps) {
                           type="file"
                           className="hidden"
                           accept="image/*"
-                          disabled={isUploading}
+                          disabled={uploadStatus.isUploading}
                           onChange={(e) => handleFileUpload(e, (url) => {
                             if (editableData) {
                               const newProjects = [...editableData.projects];
